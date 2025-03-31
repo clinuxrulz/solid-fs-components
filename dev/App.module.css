@@ -1,0 +1,24 @@
+[data-fs-cell]:hover {
+  background-color: lightgrey;
+}
+
+[data-fs-cell] {
+  display: grid;
+  margin: 0px;
+  border: 0px;
+  background: transparent;
+  padding: 0px;
+  text-align: left;
+}
+
+[data-fs-cell='dir'] > div {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 5px;
+  margin: 0px;
+  text-align: left;
+}
+
+[data-fs-cell='file'] > div {
+  text-align: left;
+}

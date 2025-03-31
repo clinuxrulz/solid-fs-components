@@ -1,0 +1,21 @@
+[data-fs-cell]:hover {
+  background-color: red;
+}
+
+[data-fs-cell] button {
+  border: 0px;
+  background: transparent;
+}
+
+[data-fs-cell='dir'] button {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 5px;
+  margin: 0px;
+  padding: 0px 5px;
+  text-align: left;
+}
+
+[data-fs-cell='file'] button {
+  text-align: left;
+}
