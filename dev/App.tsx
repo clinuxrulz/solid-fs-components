@@ -1,7 +1,6 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { createSignal, Show, type Component } from 'solid-js'
-import { createFileSystem } from 'src/create-filesystem'
-import { Dir, FileTree } from 'src/file-tree'
+import { createFileSystem, Dir, FileTree } from 'src'
 import { TmTextarea } from 'tm-textarea/solid'
 import styles from './App.module.css'
 

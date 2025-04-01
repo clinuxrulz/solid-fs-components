@@ -13,15 +13,21 @@ headless components for visualizing reactive fs.
 Install it:
 
 ```bash
-npm i solid-fs-components
+npm i @bigmistqke/solid-fs-components
 # or
-yarn add solid-fs-components
+yarn add @bigmistqke/solid-fs-components
 # or
-pnpm add solid-fs-components
+pnpm add @bigmistqke/solid-fs-components
 ```
 
 Use it:
 
 ```tsx
-import solid-fs-components from 'solid-fs-components'
+import { FileTree, createFileSystem } from '@bigmistqke/solid-fs-components'
+
+export default App(){
+  const fs = createFileSystem()
+  fs.writeFile('index.ts', 'export const sum = (a: number, b: number) => a + b')
+  return <FileTree fs={fs} />
+}
 ```
