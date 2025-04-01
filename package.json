@@ -1,17 +1,17 @@
 {
-  "name": "{{name_of_lib}}",
+  "name": "solid-fs-components",
   "version": "0.0.0",
-  "description": "{{desc_of_lib}}",
+  "description": "headless components for visualizing reactive fs.",
   "license": "MIT",
-  "author": "{{me}}",
+  "author": "bigmistqke",
   "contributors": [],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/{{me}}/{{name_of_lib}}.git"
+    "url": "git+https://github.com/bigmistqke/solid-fs-components.git"
   },
-  "homepage": "https://github.com/{{me}}/{{name_of_lib}}#readme",
+  "homepage": "https://github.com/bigmistqke/solid-fs-components#readme",
   "bugs": {
-    "url": "https://github.com/{{me}}/{{name_of_lib}}/issues"
+    "url": "https://github.com/bigmistqke/solid-fs-components/issues"
   },
   "files": [
     "dist"
