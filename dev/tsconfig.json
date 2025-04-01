@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["vite/client"]
+    "types": ["vite/client", "@bigmistqke/vite-plugin-raw-directory/client"]
   },
   "exclude": ["node_modules", "dist"]
 }

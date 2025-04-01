@@ -1,24 +1,43 @@
-[data-fs-cell]:hover {
-  background-color: lightgrey;
+* {
+  scrollbar-color: lightgrey transparent;
+  scrollbar-width: thin;
 }
 
-[data-fs-cell] {
+.app {
   display: grid;
-  margin: 0px;
-  border: 0px;
-  background: transparent;
-  padding: 0px;
-  text-align: left;
+  grid-template-columns: 125px 125px 1fr;
+  justify-content: start;
+  height: 100vh;
 }
 
-[data-fs-cell='dir'] > div {
-  display: grid;
-  grid-template-columns: 10px 1fr;
-  gap: 5px;
-  margin: 0px;
-  text-align: left;
+.app [data-fs-tree] {
+  --fs-indent-guide-color: rgb(160, 160, 160);
+  --fs-indent-guide-width: 15px;
+  --fs-cell-height: 25px;
 }
 
-[data-fs-cell='file'] > div {
-  text-align: left;
+.app [data-fs-cell]:hover {
+  background-color: rgb(244, 244, 244);
+}
+
+.app [data-fs-cell]:focus {
+  outline: none;
+  border-right: 5px solid rgb(160, 160, 160);
+  background-color: rgb(244, 244, 244);
+}
+
+.app [data-fs-selected] {
+  text-decoration: underline;
+}
+
+.input {
+  border: none;
+  border-top: 1px solid lightgrey;
+  background: black;
+  padding: 10px;
+  color: white;
+  font-family: monospace;
+  &:focus-visible {
+    outline: none;
+  }
 }

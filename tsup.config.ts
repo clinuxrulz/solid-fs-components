@@ -1,3 +1,4 @@
+import cssModulesPlugin from 'esbuild-css-modules-plugin'
 import { defineConfig } from 'tsup'
 import * as preset from 'tsup-preset-solid'
 
@@ -7,7 +8,7 @@ const preset_options: preset.PresetOptions = {
     // default entry (index)
     {
       // entries with '.tsx' extension will have `solid` export condition generated
-      entry: 'src/index.tsx',
+      entry: 'src/index.ts',
       // will generate a separate development entry
       dev_entry: true,
     },
@@ -38,5 +39,15 @@ export default defineConfig(config => {
     preset.writePackageJson(package_fields)
   }
 
-  return preset.generateTsupOptions(parsed_options)
+  console.log(preset.generateTsupOptions(parsed_options))
+  return preset
+    .generateTsupOptions(parsed_options)
+    .map(value => ({
+      ...value,
+      esbuildPlugins: [...(value.esbuildPlugins || []), cssModulesPlugin()],
+    }))
+  return {
+    esbuildPlugins: [cssModulesPlugin()],
+    ...preset.generateTsupOptions(parsed_options),
+  }
 })

@@ -81,6 +81,9 @@ export function createFileSystem<T>() {
   }
 
   const fs = {
+    exists(path: string) {
+      return path in dirEnts
+    },
     getType(path: string): DirEnt<T>['type'] {
       path = normalizePath(path)
 
