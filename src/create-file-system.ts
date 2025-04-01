@@ -43,7 +43,7 @@ export function createFile<T>(initial: T): File<T> {
 /*                                                                                */
 /**********************************************************************************/
 
-export function createFileSystem<T>() {
+export function createFileSystem<T = string>() {
   const [dirEnts, setDirEnts] = createStore<Record<string, DirEnt<T>>>({})
 
   function assertPathExists(path: string) {
