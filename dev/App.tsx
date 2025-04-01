@@ -42,21 +42,16 @@ const App: Component = () => {
 
   return (
     <Split class={styles.app}>
-      <Split.Pane size="250px">
-        <FileTree
-          class={styles.default}
-          fs={fs}
-          selectedPath={selected()}
-          onPathSelect={setSelected}
-        />
+      <Split.Pane size="175px">
+        <FileTree class={styles.default} fs={fs} selected={selected()} onSelect={setSelected} />
       </Split.Pane>
       <Split.Handle size="5px" style={{ background: 'lightgrey', cursor: 'ew-resize' }} />
-      <Split.Pane size="250px">
+      <Split.Pane size="175px">
         <FileTree
           fs={fs}
           class={styles.custom}
-          selectedPath={selected()}
-          onPathSelect={setSelected}
+          selected={selected()}
+          onSelect={setSelected}
           sort={(a, b) =>
             a.type === b.type ? (a.path < b.path ? 1 : -1) : a.type === 'dir' ? -1 : 1
           }
@@ -100,7 +95,7 @@ const App: Component = () => {
                 <Dir
                   {...props}
                   components={{
-                    Prefix: props => (
+                    Indicator: props => (
                       <div
                         style={{
                           display: 'flex',

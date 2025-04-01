@@ -15,8 +15,8 @@ import { getNameFromPath } from './utils'
 export function FileTree<T>(
   treeProps: ComponentProps<'div'> & {
     fs: FileSystem<T>
-    selectedPath?: string
-    onPathSelect?(path: string): void
+    selected?: string
+    onSelect?(path: string): void
     sort?(
       pathA: {
         type: 'dir' | 'file'
@@ -46,13 +46,7 @@ export function FileTree<T>(
     }
   },
 ) {
-  const [, rest] = splitProps(treeProps, [
-    'class',
-    'components',
-    'fs',
-    'onPathSelect',
-    'selectedPath',
-  ])
+  const [, rest] = splitProps(treeProps, ['class', 'components', 'fs', 'onSelect', 'selected'])
   const Components = mergeProps(
     {
       File,
@@ -63,7 +57,7 @@ export function FileTree<T>(
   )
   const openedDirs = new ReactiveSet<string>()
 
-  const isPathSelected = createSelector(() => treeProps.selectedPath)
+  const isSelected = createSelector(() => treeProps.selected)
 
   function IndentGuides(props: { layer: number; path: string; type: 'dir' | 'file' }) {
     return (
@@ -105,7 +99,7 @@ export function FileTree<T>(
                 openedDirs.add(props.path)
               }
             }}
-            selected={isPathSelected(props.path)}
+            selected={isSelected(props.path)}
           />
         </Show>
         <Show when={props.layer === 0 || openedDirs.has(props.path)}>
@@ -128,8 +122,8 @@ export function FileTree<T>(
           <Components.File
             layer={props.layer}
             path={props.path}
-            selected={isPathSelected(props.path)}
-            onClick={() => treeProps.onPathSelect?.(props.path)}
+            selected={isSelected(props.path)}
+            onClick={() => treeProps.onSelect?.(props.path)}
             indentGuides={<IndentGuides layer={props.layer} path={props.path} type="file" />}
           />
         }
@@ -144,12 +138,15 @@ export function FileTree<T>(
   )
 }
 
+/**********************************************************************************/
+/*                                                                                */
+/*                           Default TreeFile Components                          */
+/*                                                                                */
+/**********************************************************************************/
+
 export function IndentGuide(props: { layer: number; count: number; type: 'file' | 'dir' }) {
   return (
-    <div
-      data-fs-indent-guide={props.layer === props.count ? 'vertical' : 'connection'}
-      style={{ position: 'relative' }}
-    >
+    <div style={{ position: 'relative' }}>
       <Show
         when={props.layer === props.count}
         fallback={
@@ -200,7 +197,7 @@ export function Dir(
     selected: boolean
     style?: JSX.CSSProperties
     components?: {
-      Prefix?(props: { collapsed: boolean }): JSX.Element
+      Indicator?(props: { collapsed: boolean }): JSX.Element
     }
   },
 ) {
@@ -217,7 +214,7 @@ export function Dir(
   ])
   const Components = mergeProps(
     {
-      Prefix: (props: { collapsed: boolean }) => (
+      Indicator: (props: { collapsed: boolean }) => (
         <span style={{ 'text-align': 'center', flex: '0 var(--fs-indent-guide-width, 15px)' }}>
           {props.collapsed ? '+' : '–'}
         </span>
@@ -239,7 +236,7 @@ export function Dir(
       {...rest}
     >
       {props.indentGuides}
-      <Components.Prefix collapsed={props.collapsed} />
+      <Components.Indicator collapsed={props.collapsed} />
       <span>{getNameFromPath(props.path)}</span>
     </button>
   )
