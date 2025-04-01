@@ -5,7 +5,7 @@ import { TmTextarea } from 'tm-textarea/solid'
 import styles from './App.module.css'
 
 const App: Component = () => {
-  const [selected, setSelected] = createSignal<string>()
+  const [selected, setSelected] = createSignal<string>('index0.ts')
 
   const fs = createFileSystem<string>()
 

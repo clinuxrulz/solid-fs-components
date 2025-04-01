@@ -1,17 +1,8 @@
 import { Repeat } from '@solid-primitives/range'
-import {
-  ComponentProps,
-  createSelector,
-  createSignal,
-  Index,
-  JSX,
-  mergeProps,
-  Show,
-  splitProps,
-} from 'solid-js'
-import { type FileSystem } from './create-filesystem'
-/** @ts-ignore */
+import { ReactiveSet } from '@solid-primitives/set'
 import clsx from 'clsx'
+import { ComponentProps, createSelector, Index, JSX, mergeProps, Show, splitProps } from 'solid-js'
+import { type FileSystem } from './create-file-system'
 import styles from './file-tree.module.css'
 import { getNameFromPath } from './utils'
 
@@ -30,7 +21,6 @@ export function FileTree<T>(
       File?(props: { path: string; layer: number; indentGuides: JSX.Element }): JSX.Element
       Dir?(props: {
         collapsed: boolean
-        hidden: boolean
         indentGuides: JSX.Element
         layer: number
         onClick: (event: MouseEvent) => void
@@ -61,6 +51,8 @@ export function FileTree<T>(
     },
     treeProps.components,
   )
+  const openedDirs = new ReactiveSet<string>()
+
   const isPathSelected = createSelector(() => treeProps.selectedPath)
 
   function IndentGuides(props: { layer: number; path: string; type: 'dir' | 'file' }) {
@@ -78,8 +70,7 @@ export function FileTree<T>(
     )
   }
 
-  function DirCell(props: { layer: number; path: string; hidden: boolean }) {
-    const [collapsed, setCollapsed] = createSignal(true)
+  function DirCell(props: { layer: number; path: string }) {
     const childDirEnts = () =>
       treeProps.fs
         .readdir(props.path, { withFileTypes: true })
@@ -93,39 +84,38 @@ export function FileTree<T>(
           <Components.Dir
             layer={props.layer}
             path={props.path}
-            collapsed={collapsed()}
+            collapsed={!openedDirs.has(props.path)}
             indentGuides={<IndentGuides layer={props.layer} path={props.path} type="dir" />}
-            onClick={() => setCollapsed(bool => !bool)}
+            onClick={() => {
+              if (openedDirs.has(props.path)) {
+                openedDirs.delete(props.path)
+              } else {
+                openedDirs.add(props.path)
+              }
+            }}
             selected={isPathSelected(props.path)}
-            hidden={props.hidden}
           />
         </Show>
-        <Index each={childDirEnts()}>
-          {dirEnt => {
-            return (
-              <DirEnt
-                layer={props.layer + 1}
-                path={dirEnt().path}
-                type={dirEnt().type}
-                hidden={props.layer !== 0 && (collapsed() || props.hidden)}
-              />
-            )
-          }}
-        </Index>
+        <Show when={props.layer === 0 || openedDirs.has(props.path)}>
+          <Index each={childDirEnts()}>
+            {dirEnt => {
+              return <DirEnt layer={props.layer + 1} path={dirEnt().path} type={dirEnt().type} />
+            }}
+          </Index>
+        </Show>
       </>
     )
   }
 
-  function DirEnt(props: { layer: number; path: string; type: 'file' | 'dir'; hidden: boolean }) {
+  function DirEnt(props: { layer: number; path: string; type: 'file' | 'dir' }) {
     return (
       <Show
         when={props.type === 'dir'}
-        children={<DirCell layer={props.layer} path={props.path} hidden={props.hidden} />}
+        children={<DirCell layer={props.layer} path={props.path} />}
         fallback={
           <Components.File
             layer={props.layer}
             path={props.path}
-            hidden={props.hidden}
             selected={isPathSelected(props.path)}
             onClick={() => treeProps.onPathSelect?.(props.path)}
             indentGuides={<IndentGuides layer={props.layer} path={props.path} type="file" />}
@@ -137,7 +127,7 @@ export function FileTree<T>(
 
   return (
     <div data-fs-tree class={clsx(styles.tree, treeProps.class)} {...rest}>
-      <DirEnt path="" layer={0} type="dir" hidden={false} />
+      <DirEnt path="" layer={0} type="dir" />
     </div>
   )
 }
@@ -191,7 +181,6 @@ export function IndentGuide(props: { layer: number; count: number; type: 'file' 
 export function Dir(
   props: Omit<ComponentProps<'button'>, 'style'> & {
     collapsed: boolean
-    hidden: boolean
     indentGuides: JSX.Element
     layer: number
     onClick: (event: MouseEvent) => void
@@ -207,7 +196,6 @@ export function Dir(
     'style',
     'class',
     'collapsed',
-    'hidden',
     'indentGuides',
     'layer',
     'onClick',
@@ -215,7 +203,7 @@ export function Dir(
     'selected',
     'components',
   ])
-  const defaultProps = mergeProps(
+  const Components = mergeProps(
     {
       Prefix: (props: { collapsed: boolean }) => (
         <span style={{ 'text-align': 'center', flex: '0 var(--fs-indent-guide-width, 15px)' }}>
@@ -232,7 +220,6 @@ export function Dir(
       aria-selected={props.selected || undefined}
       aria-collapsed={props.collapsed || undefined}
       style={{
-        display: props.hidden ? 'none' : undefined,
         'grid-template-columns': `repeat(${props.layer}, var(--fs-indent-guide-width, 15px)) 1fr`,
         ...props.style,
       }}
@@ -240,15 +227,13 @@ export function Dir(
       {...rest}
     >
       {props.indentGuides}
-      <defaultProps.Prefix collapsed={props.collapsed} />
-
+      <Components.Prefix collapsed={props.collapsed} />
       <span>{getNameFromPath(props.path)}</span>
     </button>
   )
 }
 
 export function File(props: {
-  hidden: boolean
   indentGuides: JSX.Element
   layer: number
   onClick: (event: MouseEvent) => void
@@ -261,7 +246,6 @@ export function File(props: {
       data-fs-cell="file"
       data-fs-selected={props.selected || undefined}
       style={{
-        display: props.hidden ? 'none' : undefined,
         'grid-template-columns': `repeat(${
           props.layer - 1
         }, var(--fs-indent-guide-width, 15px)) 1fr`,

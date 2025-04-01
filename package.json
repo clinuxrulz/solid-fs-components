@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@solid-primitives/range": "^0.2.0",
+    "@solid-primitives/set": "^0.6.0",
     "clsx": "^2.1.1"
   },
   "peerDependencies": {

@@ -11,6 +11,9 @@ importers:
       '@solid-primitives/range':
         specifier: ^0.2.0
         version: 0.2.0(solid-js@1.8.17)
+      '@solid-primitives/set':
+        specifier: ^0.6.0
+        version: 0.6.0(solid-js@1.8.17)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -824,6 +827,16 @@ packages:
 
   '@solid-primitives/scheduled@1.5.0':
     resolution: {integrity: sha512-RVw24IRNh1FQ4DCMb3OahB70tXIwc5vH8nhR4nNPsXwUPQeuOkLsDI5BlxaPk0vyZgqw9lDpufgI3HnPwplgDw==}
+    peerDependencies:
+      solid-js: ^1.6.12
+
+  '@solid-primitives/set@0.6.0':
+    resolution: {integrity: sha512-P1Tp001m8ib5XCi/LEJHh2QsoS2uPO86HewtbrSxr2axt5te9EGc0UOwNKTPxNvNSLNHteUw5IrzDsEklW4m3g==}
+    peerDependencies:
+      solid-js: ^1.6.12
+
+  '@solid-primitives/trigger@1.2.0':
+    resolution: {integrity: sha512-sW4/3cDXSjYQampn8CIFZ11BlxgNf2li8r2fXnb3b3YWE6RdZZCl8PhvpPF38Gzl0CnryrbTPJWM7OIkseCDgQ==}
     peerDependencies:
       solid-js: ^1.6.12
 
@@ -3007,6 +3020,16 @@ snapshots:
 
   '@solid-primitives/scheduled@1.5.0(solid-js@1.8.17)':
     dependencies:
+      solid-js: 1.8.17
+
+  '@solid-primitives/set@0.6.0(solid-js@1.8.17)':
+    dependencies:
+      '@solid-primitives/trigger': 1.2.0(solid-js@1.8.17)
+      solid-js: 1.8.17
+
+  '@solid-primitives/trigger@1.2.0(solid-js@1.8.17)':
+    dependencies:
+      '@solid-primitives/utils': 6.3.0(solid-js@1.8.17)
       solid-js: 1.8.17
 
   '@solid-primitives/utils@6.3.0(solid-js@1.8.17)':
