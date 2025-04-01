@@ -37,7 +37,12 @@ export function FileTree<T>(
         path: string
         selected: boolean
       }): JSX.Element
-      IndentGuide?(props: { path: string; layer: number; count: number }): JSX.Element
+      IndentGuide?(props: {
+        count: number
+        layer: number
+        path: string
+        type: 'dir' | 'file'
+      }): JSX.Element
     }
   },
 ) {
@@ -58,11 +63,16 @@ export function FileTree<T>(
   )
   const isPathSelected = createSelector(() => treeProps.selectedPath)
 
-  function IndentGuides(props: { layer: number; path: string }) {
+  function IndentGuides(props: { layer: number; path: string; type: 'dir' | 'file' }) {
     return (
       <Repeat times={props.layer - 1}>
         {index => (
-          <Components.IndentGuide path={props.path} layer={index} count={props.layer - 2} />
+          <Components.IndentGuide
+            path={props.path}
+            layer={index}
+            count={props.layer - 2}
+            type={props.type}
+          />
         )}
       </Repeat>
     )
@@ -84,7 +94,7 @@ export function FileTree<T>(
             layer={props.layer}
             path={props.path}
             collapsed={collapsed()}
-            indentGuides={<IndentGuides layer={props.layer} path={props.path} />}
+            indentGuides={<IndentGuides layer={props.layer} path={props.path} type="dir" />}
             onClick={() => setCollapsed(bool => !bool)}
             selected={isPathSelected(props.path)}
             hidden={props.hidden}
@@ -118,7 +128,7 @@ export function FileTree<T>(
             hidden={props.hidden}
             selected={isPathSelected(props.path)}
             onClick={() => treeProps.onPathSelect?.(props.path)}
-            indentGuides={<IndentGuides layer={props.layer} path={props.path} />}
+            indentGuides={<IndentGuides layer={props.layer} path={props.path} type="file" />}
           />
         }
       />
@@ -132,7 +142,7 @@ export function FileTree<T>(
   )
 }
 
-export function IndentGuide(props: { layer: number; count: number }) {
+export function IndentGuide(props: { layer: number; count: number; type: 'file' | 'dir' }) {
   return (
     <div
       data-fs-indent-guide={props.layer === props.count ? 'vertical' : 'connection'}
@@ -178,18 +188,33 @@ export function IndentGuide(props: { layer: number; count: number }) {
   )
 }
 
-export function Dir(props: {
-  collapsed: boolean
-  hidden: boolean
-  indentGuides: JSX.Element
-  layer: number
-  onClick: (event: MouseEvent) => void
-  path: string
-  selected: boolean
-  components?: {
-    Prefix?(props: { collapsed: boolean }): JSX.Element
-  }
-}) {
+export function Dir(
+  props: Omit<ComponentProps<'button'>, 'style'> & {
+    collapsed: boolean
+    hidden: boolean
+    indentGuides: JSX.Element
+    layer: number
+    onClick: (event: MouseEvent) => void
+    path: string
+    selected: boolean
+    style?: JSX.CSSProperties
+    components?: {
+      Prefix?(props: { collapsed: boolean }): JSX.Element
+    }
+  },
+) {
+  const [, rest] = splitProps(props, [
+    'style',
+    'class',
+    'collapsed',
+    'hidden',
+    'indentGuides',
+    'layer',
+    'onClick',
+    'path',
+    'selected',
+    'components',
+  ])
   const defaultProps = mergeProps(
     {
       Prefix: (props: { collapsed: boolean }) => (
@@ -202,14 +227,17 @@ export function Dir(props: {
   )
   return (
     <button
-      class={styles.cell}
+      class={clsx(styles.cell, props.class)}
       data-fs-cell="dir"
-      data-fs-selected={props.selected || undefined}
+      aria-selected={props.selected || undefined}
+      aria-collapsed={props.collapsed || undefined}
       style={{
         display: props.hidden ? 'none' : undefined,
         'grid-template-columns': `repeat(${props.layer}, var(--fs-indent-guide-width, 15px)) 1fr`,
+        ...props.style,
       }}
       onClick={props.onClick}
+      {...rest}
     >
       {props.indentGuides}
       <defaultProps.Prefix collapsed={props.collapsed} />

@@ -10,24 +10,61 @@
   height: 100vh;
 }
 
-.app [data-fs-tree] {
+.default[data-fs-tree] {
   --fs-indent-guide-color: rgb(160, 160, 160);
   --fs-indent-guide-width: 15px;
   --fs-cell-height: 25px;
 }
 
-.app [data-fs-cell]:hover {
+.default [data-fs-cell]:hover {
   background-color: rgb(244, 244, 244);
 }
 
-.app [data-fs-cell]:focus {
+.default [data-fs-cell]:focus {
   outline: none;
   border-right: 5px solid rgb(160, 160, 160);
   background-color: rgb(244, 244, 244);
 }
 
-.app [data-fs-selected] {
+.default [data-fs-selected] {
   text-decoration: underline;
+}
+
+.custom[data-fs-tree] {
+  --fs-indent-guide-color: rgb(238, 238, 238);
+  --fs-indent-guide-width: 15px;
+  --fs-cell-height: 40px;
+  background-color: #23262e;
+  color: white;
+}
+
+.custom [data-fs-cell] {
+  color: white;
+  fill: white;
+}
+
+.custom [data-fs-cell]:hover {
+  background-color: rgba(244, 244, 244, 0.25);
+}
+
+.custom [data-fs-cell]:focus {
+  outline: none;
+  border-right: 5px solid rgb(238, 238, 238);
+  background-color: rgba(244, 244, 244, 0.5);
+}
+
+.custom [aria-collapsed] .dirIndentGuide {
+  box-sizing: border-box;
+  border: 1px solid white;
+  background: #23262e !important;
+}
+
+.custom [aria-selected] {
+  text-decoration: underline;
+}
+
+.textarea {
+  padding: 10px;
 }
 
 .input {

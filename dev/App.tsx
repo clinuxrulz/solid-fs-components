@@ -1,10 +1,8 @@
 import { Split } from '@bigmistqke/solid-grid-split'
-import { createSignal, type Component } from 'solid-js'
+import { createSignal, Show, type Component } from 'solid-js'
 import { createFileSystem } from 'src/create-filesystem'
 import { Dir, FileTree } from 'src/file-tree'
 import { TmTextarea } from 'tm-textarea/solid'
-import dev from '../dev?raw-directory'
-import src from '../src?raw-directory'
 import styles from './App.module.css'
 
 const App: Component = () => {
@@ -12,34 +10,8 @@ const App: Component = () => {
 
   const fs = createFileSystem<string>()
 
-  function createDirectories(path: string) {
-    const parts = path.split('/')
-    let route = []
-    parts.forEach(part => {
-      route.push(part)
-      const path = route.join('/')
-      if (!fs.exists(path)) {
-        fs.mkdir(path)
-      }
-    })
-  }
-
-  Object.entries(dev).forEach(([path, value]) => {
-    path = path.replace('./', 'dev/')
-    const parts = path.split('/')
-    createDirectories(parts.slice(0, -1).join('/'))
-    fs.writeFile(path, value)
-  })
-  Object.entries(src).forEach(([path, value]) => {
-    path = path.replace('./', 'src/')
-    const parts = path.split('/')
-    createDirectories(parts.slice(0, -1).join('/'))
-    fs.writeFile(path, value)
-  })
-
   function mockData(parts: Array<string>) {
     if (parts.length > 5) return
-    // console.log(parts.join('/'))
     fs.mkdir(parts.join('/'))
 
     for (let i = 0; i < 3; i++) {
@@ -53,19 +25,18 @@ const App: Component = () => {
   }
 
   mockData(['test'])
-
-  /* fs.writeFile('index.ts', `export const value = 'Hello World from index.ts'`)
-  fs.mkdir('test')
-  fs.writeFile('test/index.ts', `export const value = 'Hello World from test/index.ts'`)
-  fs.mkdir('test/test')
-  fs.mkdir('test/test2')
-  fs.writeFile('test/test/index.ts', `export const value = 'Hello World from test/test/index.ts'`)
-  fs.writeFile('test/test2/index.ts', `export const value = 'Hello World test/test2/index.ts'`) */
+  for (let i = 0; i < 3; i++) {
+    const path = `index${i}.ts`
+    fs.writeFile(path, `export const value = 'Hello World from ${path}'`)
+  }
 
   const grammar = () => {
     const _selected = selected()
     if (_selected?.endsWith('css')) {
       return 'css'
+    }
+    if (_selected?.endsWith('html')) {
+      return 'html'
     }
     return 'tsx'
   }
@@ -84,6 +55,7 @@ const App: Component = () => {
       <Split.Pane size="250px">
         <FileTree
           fs={fs}
+          class={styles.custom}
           selectedPath={selected()}
           onPathSelect={setSelected}
           components={{
@@ -99,10 +71,25 @@ const App: Component = () => {
                       width: '100%',
                       top: '0%',
                       left: 'calc(50% - 0.5px)',
-                      'border-left': '1px solid red',
+                      'border-left': '1px solid var(--fs-indent-guide-color)',
                       height: '100%',
                     }}
                   />
+                  <Show when={props.type === 'dir' && props.layer === props.count}>
+                    <div
+                      class={styles.dirIndentGuide}
+                      style={{
+                        position: 'absolute',
+                        transform: 'translate(-50%,-50%)',
+                        width: '5px',
+                        left: '50%',
+                        top: '50%',
+                        height: '5px',
+                        'border-radius': '2.5px',
+                        background: 'white',
+                      }}
+                    />
+                  </Show>
                 </div>
               )
             },
@@ -150,8 +137,9 @@ const App: Component = () => {
         <TmTextarea
           value={selected() ? fs.readFile(selected()!) : ''}
           grammar={grammar()}
-          style={{ height: '100%' }}
+          class={styles.textarea}
           theme="andromeeda"
+          onInput={event => fs.writeFile(selected()!, event.currentTarget.value)}
         />
         <input
           placeholder="p.ex fs.writeFile('test2.ts', 'Hello World!')"
