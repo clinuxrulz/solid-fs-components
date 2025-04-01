@@ -17,6 +17,16 @@ export function FileTree<T>(
     fs: FileSystem<T>
     selectedPath?: string
     onPathSelect?(path: string): void
+    sort?(
+      pathA: {
+        type: 'dir' | 'file'
+        path: string
+      },
+      pathB: {
+        type: 'dir' | 'file'
+        path: string
+      },
+    ): number
     components?: {
       File?(props: { path: string; layer: number; indentGuides: JSX.Element }): JSX.Element
       Dir?(props: {
@@ -74,8 +84,10 @@ export function FileTree<T>(
     const childDirEnts = () =>
       treeProps.fs
         .readdir(props.path, { withFileTypes: true })
-        .sort((a, b) =>
-          a.type === b.type ? (a.path < b.path ? -1 : 1) : a.type === 'dir' ? -1 : 1,
+        .sort(
+          treeProps.sort ||
+            ((a, b) =>
+              a.type === b.type ? (a.path < b.path ? -1 : 1) : a.type === 'dir' ? -1 : 1),
         )
 
     return (

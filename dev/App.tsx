@@ -57,6 +57,9 @@ const App: Component = () => {
           class={styles.custom}
           selectedPath={selected()}
           onPathSelect={setSelected}
+          sort={(a, b) =>
+            a.type === b.type ? (a.path < b.path ? 1 : -1) : a.type === 'dir' ? -1 : 1
+          }
           components={{
             IndentGuide(props) {
               return (
