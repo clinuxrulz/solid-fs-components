@@ -1,6 +1,6 @@
 import { createSignal, type Accessor } from 'solid-js'
 import { createStore, produce } from 'solid-js/store'
-import { getParentDirectory, normalizePath } from './utils'
+import { PathUtils } from './utils'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -64,20 +64,20 @@ export function createFileSystem<T = string>() {
   ): Array<{ type: 'dir' | 'file'; path: string }>
   function readdir(path: string): Array<string>
   function readdir(path: string, options?: { withFileTypes?: boolean }) {
-    path = normalizePath(path)
+    path = PathUtils.normalize(path)
 
     assertPathExists(path)
 
     if (options?.withFileTypes) {
       return Object.entries(dirEnts)
-        .filter(([_path]) => getParentDirectory(_path) === path)
+        .filter(([_path]) => PathUtils.getParent(_path) === path && _path !== path)
         .map(([path, file]) => ({
           type: file.type,
           path,
         }))
     }
 
-    return Object.keys(dirEnts).filter(_path => getParentDirectory(_path) === path)
+    return Object.keys(dirEnts).filter(_path => PathUtils.getParent(_path) === path)
   }
 
   const fs = {
@@ -85,7 +85,7 @@ export function createFileSystem<T = string>() {
       return path in dirEnts
     },
     getType(path: string): DirEnt<T>['type'] {
-      path = normalizePath(path)
+      path = PathUtils.normalize(path)
 
       assertPathExists(path)
 
@@ -93,7 +93,7 @@ export function createFileSystem<T = string>() {
     },
     readdir,
     mkdir(path: string, options?: { recursive?: boolean }) {
-      path = normalizePath(path)
+      path = PathUtils.normalize(path)
 
       if (options?.recursive) {
         const parts = path.split('/')
@@ -103,12 +103,12 @@ export function createFileSystem<T = string>() {
         return
       }
 
-      assertPathExists(getParentDirectory(path))
+      assertPathExists(PathUtils.getParent(path))
 
       setDirEnts(path, { type: 'dir' })
     },
     readFile(path: string) {
-      path = normalizePath(path)
+      path = PathUtils.normalize(path)
 
       assertPathExists(path)
 
@@ -121,10 +121,18 @@ export function createFileSystem<T = string>() {
       return dirEnt.get()
     },
     rename(previous: string, next: string) {
-      previous = normalizePath(previous)
-      next = normalizePath(next)
+      previous = PathUtils.normalize(previous)
+      next = PathUtils.normalize(next)
 
-      assertPathExists(previous)
+      if (fs.exists(next)) {
+        console.error(dirEnts)
+        throw `Path ${next} already exists.`
+      }
+
+      if (!fs.exists(previous)) {
+        console.error(`Path does not exist: ${previous}`)
+        return
+      }
 
       setDirEnts(
         produce(files => {
@@ -140,7 +148,7 @@ export function createFileSystem<T = string>() {
       )
     },
     rm(path: string, options?: { force?: boolean; recursive?: boolean }) {
-      path = normalizePath(path)
+      path = PathUtils.normalize(path)
 
       if (!options || !options.force) {
         assertPathExists(path)
@@ -166,8 +174,8 @@ export function createFileSystem<T = string>() {
       )
     },
     writeFile(path: string, source: T) {
-      path = normalizePath(path)
-      assertPathExists(getParentDirectory(path))
+      path = PathUtils.normalize(path)
+      assertPathExists(PathUtils.getParent(path))
 
       const dirEnt = dirEnts[path]
 

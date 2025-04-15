@@ -1,6 +1,6 @@
 import { Split } from '@bigmistqke/solid-grid-split'
-import { createSignal, Show, type Component } from 'solid-js'
-import { createFileSystem, Dir, FileTree } from 'src'
+import { createSignal, type Component } from 'solid-js'
+import { createFileSystem, DefaultIndentGuide, FileTree } from 'src'
 import { TmTextarea } from 'tm-textarea/solid'
 import styles from './App.module.css'
 
@@ -13,12 +13,12 @@ const App: Component = () => {
     if (parts.length > 5) return
     fs.mkdir(parts.join('/'))
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < Math.floor(Math.random() * 3); i++) {
       const path = `${parts.join('/')}/index${i}.ts`
       fs.writeFile(path, `export const value = 'Hello World from ${path}'`)
     }
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < Math.floor(Math.random() * 3 + 1); i++) {
       mockData([...parts, 'test' + i])
     }
   }
@@ -43,91 +43,59 @@ const App: Component = () => {
   return (
     <Split class={styles.app}>
       <Split.Pane size="175px">
-        <FileTree class={styles.default} fs={fs} selected={selected()} onSelect={setSelected} />
-      </Split.Pane>
-      <Split.Handle size="5px" style={{ background: 'lightgrey', cursor: 'ew-resize' }} />
-      <Split.Pane size="175px">
         <FileTree
           fs={fs}
           class={styles.custom}
-          selected={selected()}
-          onSelect={setSelected}
-          sort={(a, b) =>
-            a.type === b.type ? (a.path < b.path ? 1 : -1) : a.type === 'dir' ? -1 : 1
-          }
-          components={{
-            IndentGuide(props) {
-              return (
-                <div
-                  data-fs-indent-guide={props.layer === props.count ? 'vertical' : 'connection'}
-                  style={{ position: 'relative' }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      width: '100%',
-                      top: '0%',
-                      left: 'calc(50% - 0.5px)',
-                      'border-left': '1px solid var(--fs-indent-guide-color)',
-                      height: '100%',
-                    }}
-                  />
-                  <Show when={props.type === 'dir' && props.layer === props.count}>
-                    <div
-                      class={styles.dirIndentGuide}
-                      style={{
-                        position: 'absolute',
-                        transform: 'translate(-50%,-50%)',
-                        width: '5px',
-                        left: '50%',
-                        top: '50%',
-                        height: '5px',
-                        'border-radius': '2.5px',
-                        background: 'white',
-                      }}
-                    />
-                  </Show>
-                </div>
-              )
-            },
-            Dir(props) {
-              return (
-                <Dir
-                  {...props}
-                  components={{
-                    Indicator: props => (
-                      <div
-                        style={{
-                          display: 'flex',
-                          'align-items': 'center',
-                          padding: '2px',
-                        }}
-                      >
-                        {props.collapsed ? (
-                          <svg
-                            style={{ 'aspect-ratio': '1/1' }}
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 320 512"
-                          >
-                            <path d="M310.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-192 192c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L242.7 256 73.4 86.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l192 192z" />
-                          </svg>
-                        ) : (
-                          <svg
-                            style={{ 'aspect-ratio': '1/1' }}
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 512 512"
-                          >
-                            <path d="M233.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 338.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z" />
-                          </svg>
-                        )}
-                      </div>
-                    ),
-                  }}
+          onSelection={paths => console.log('onSelection', paths)}
+        >
+          {dirEnt => {
+            const [editable, setEditable] = createSignal(false)
+            return (
+              <FileTree.DirEnt
+                class={styles.dirEnt}
+                style={{
+                  background: dirEnt.selected ? '#484f6c' : 'none',
+                }}
+                onMouseDown={() => {
+                  if (dirEnt.type === 'file') {
+                    setSelected(dirEnt.path)
+                  }
+                }}
+                onDblClick={() => setEditable(true)}
+                onKeyDown={e => {
+                  if (e.code === 'Enter') {
+                    setEditable(editable => !editable)
+                  }
+                  if (e.code === 'Space') {
+                    if (dirEnt.type === 'dir') {
+                      if (dirEnt.opened) {
+                        dirEnt.close()
+                      } else {
+                        dirEnt.open()
+                      }
+                    } else {
+                      setSelected(dirEnt.path)
+                    }
+                  }
+                }}
+              >
+                <FileTree.IndentGuides
+                  guide={() => <DefaultIndentGuide color="white" width={15} />}
                 />
-              )
-            },
+                <FileTree.Opened
+                  closed="-"
+                  opened="+"
+                  style={{ width: '15px', 'text-align': 'center' }}
+                />
+                <FileTree.Name
+                  editable={editable()}
+                  style={{ 'margin-left': dirEnt.type === 'file' ? '7.5px' : undefined }}
+                  onBlur={() => setEditable(false)}
+                />
+              </FileTree.DirEnt>
+            )
           }}
-        />
+        </FileTree>
       </Split.Pane>
       <Split.Handle size="5px" style={{ background: 'lightgrey', cursor: 'ew-resize' }} />
       <Split.Pane size="1fr" style={{ display: 'grid', 'grid-template-rows': '1fr auto' }}>

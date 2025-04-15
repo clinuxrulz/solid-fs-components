@@ -1,7 +1,7 @@
 {
   "name": "solid-fs-components",
   "version": "0.0.0",
-  "description": "headless components for visualizing reactive fs.",
+  "description": "headless components for visualizing and interacting with reactive filesystem",
   "license": "MIT",
   "author": "bigmistqke",
   "contributors": [],
@@ -51,8 +51,8 @@
     "update-deps": "pnpm up -Li"
   },
   "dependencies": {
+    "@solid-primitives/keyed": "^1.5.0",
     "@solid-primitives/range": "^0.2.0",
-    "@solid-primitives/set": "^0.6.0",
     "clsx": "^2.1.1"
   },
   "peerDependencies": {

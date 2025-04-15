@@ -8,12 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@solid-primitives/keyed':
+        specifier: ^1.5.0
+        version: 1.5.0(solid-js@1.8.17)
       '@solid-primitives/range':
         specifier: ^0.2.0
         version: 0.2.0(solid-js@1.8.17)
-      '@solid-primitives/set':
-        specifier: ^0.6.0
-        version: 0.6.0(solid-js@1.8.17)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -815,6 +815,11 @@ packages:
   '@sinclair/typebox@0.27.8':
     resolution: {integrity: sha512-+Fj43pSMwJs4KRrH/938Uf+uAELIgVBmQzg/q1YG10djyfA3TnrU8N8XzqCh/okZdszqBQTZf96idMfE5lnwTA==}
 
+  '@solid-primitives/keyed@1.5.0':
+    resolution: {integrity: sha512-g04CXywgWG/7L4sTxQP6q1gdiirItVBq6ZO9YuLTqPFlkX3uD4IEjeL9cLHP6waahrnO8yL3OZl64pcKGYN5Qw==}
+    peerDependencies:
+      solid-js: ^1.6.12
+
   '@solid-primitives/memo@1.4.1':
     resolution: {integrity: sha512-MzNCJNpXidQdLOZUsEkwpuq52uwT8zrFrBxEVMEr9N35yIIvGhjqwrI1M6xzPmJGzuVUe8anCk57q+N5gyRk0Q==}
     peerDependencies:
@@ -827,16 +832,6 @@ packages:
 
   '@solid-primitives/scheduled@1.5.0':
     resolution: {integrity: sha512-RVw24IRNh1FQ4DCMb3OahB70tXIwc5vH8nhR4nNPsXwUPQeuOkLsDI5BlxaPk0vyZgqw9lDpufgI3HnPwplgDw==}
-    peerDependencies:
-      solid-js: ^1.6.12
-
-  '@solid-primitives/set@0.6.0':
-    resolution: {integrity: sha512-P1Tp001m8ib5XCi/LEJHh2QsoS2uPO86HewtbrSxr2axt5te9EGc0UOwNKTPxNvNSLNHteUw5IrzDsEklW4m3g==}
-    peerDependencies:
-      solid-js: ^1.6.12
-
-  '@solid-primitives/trigger@1.2.0':
-    resolution: {integrity: sha512-sW4/3cDXSjYQampn8CIFZ11BlxgNf2li8r2fXnb3b3YWE6RdZZCl8PhvpPF38Gzl0CnryrbTPJWM7OIkseCDgQ==}
     peerDependencies:
       solid-js: ^1.6.12
 
@@ -3007,6 +3002,10 @@ snapshots:
 
   '@sinclair/typebox@0.27.8': {}
 
+  '@solid-primitives/keyed@1.5.0(solid-js@1.8.17)':
+    dependencies:
+      solid-js: 1.8.17
+
   '@solid-primitives/memo@1.4.1(solid-js@1.8.17)':
     dependencies:
       '@solid-primitives/scheduled': 1.5.0(solid-js@1.8.17)
@@ -3020,16 +3019,6 @@ snapshots:
 
   '@solid-primitives/scheduled@1.5.0(solid-js@1.8.17)':
     dependencies:
-      solid-js: 1.8.17
-
-  '@solid-primitives/set@0.6.0(solid-js@1.8.17)':
-    dependencies:
-      '@solid-primitives/trigger': 1.2.0(solid-js@1.8.17)
-      solid-js: 1.8.17
-
-  '@solid-primitives/trigger@1.2.0(solid-js@1.8.17)':
-    dependencies:
-      '@solid-primitives/utils': 6.3.0(solid-js@1.8.17)
       solid-js: 1.8.17
 
   '@solid-primitives/utils@6.3.0(solid-js@1.8.17)':
