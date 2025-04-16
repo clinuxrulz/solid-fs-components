@@ -606,7 +606,6 @@ FileTree.Name = function (props: {
   class?: string
   onBlur?(event: WrapEvent<FocusEvent, HTMLInputElement>): void
 }) {
-  const [, rest] = splitProps(props, ['editable', 'style'])
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
 
@@ -652,6 +651,7 @@ FileTree.Name = function (props: {
         class={props.class}
         style={{ all: 'unset', ...props.style }}
         value={dirEnt.name}
+        spellcheck={false}
         onKeyDown={event => {
           if (event.code === 'Enter') {
             rename(event.currentTarget)
