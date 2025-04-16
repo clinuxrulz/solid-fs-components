@@ -212,7 +212,9 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     setOpenedDirs(dirs => dirs.filter(dir => dir !== path))
   }
   function openDir(path: string) {
-    setOpenedDirs(dirs => [...dirs, path])
+    if (path !== config.base && !openedDirs().includes(path)) {
+      setOpenedDirs(dirs => [...dirs, path])
+    }
   }
 
   // Record<Dir, Accessor<DirEnts>>
