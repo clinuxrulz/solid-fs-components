@@ -94,7 +94,7 @@ export function useDirEnt() {
 
 type IndentGuideKind = 'pipe' | 'tee' | 'elbow' | 'spacer'
 
-const IndentGuideContext = createContext<IndentGuideKind>()
+const IndentGuideContext = createContext<Accessor<IndentGuideKind>>()
 export function useIndentGuide() {
   const context = useContext(IndentGuideContext)
   if (!context) throw `IndentGuideContext is undefined`
@@ -530,7 +530,9 @@ FileTree.DirEnt = function (
   )
 }
 
-FileTree.IndentGuides = function (props: { guide: (type: IndentGuideKind) => JSX.Element }) {
+FileTree.IndentGuides = function (props: {
+  guide: (type: Accessor<IndentGuideKind>) => JSX.Element
+}) {
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
 
@@ -569,7 +571,7 @@ FileTree.IndentGuides = function (props: { guide: (type: IndentGuideKind) => JSX
   return (
     <Repeat times={dirEnt.indentation}>
       {index => {
-        const kind = getGuideKind(index)
+        const kind = () => getGuideKind(index)
         return (
           <IndentGuideContext.Provider value={kind}>
             {props.guide(kind)}

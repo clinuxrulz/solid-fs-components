@@ -7,14 +7,14 @@ export function DefaultIndentGuide(props: { color: string; width: number }) {
   return (
     <span style={{ '--color': props.color, position: 'relative', width: `${props.width}px` }}>
       <Switch>
-        <Match when={indentGuide === 'elbow'}>
+        <Match when={indentGuide() === 'elbow'}>
           <span class={styles.elbow} />
         </Match>
-        <Match when={indentGuide === 'tee'}>
+        <Match when={indentGuide() === 'tee'}>
           <span class={styles.pipe} />
           <span class={styles.arm} />
         </Match>
-        <Match when={indentGuide === 'pipe'}>
+        <Match when={indentGuide() === 'pipe'}>
           <span class={styles.pipe} />
         </Match>
       </Switch>
