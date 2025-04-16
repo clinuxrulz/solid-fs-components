@@ -1,6 +1,7 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { createSignal, onMount, type Component } from 'solid-js'
 import { createFileSystem, DefaultIndentGuide, FileTree } from 'src'
+import { PathUtils } from 'src/utils'
 import { TmTextarea } from 'tm-textarea/solid'
 import styles from './App.module.css'
 
@@ -55,6 +56,11 @@ const App: Component = () => {
           fs={fs}
           class={styles.custom}
           onSelection={paths => console.log('onSelection', paths)}
+          onRename={(oldPath, newPath) => {
+            if (oldPath === selectedFile() || PathUtils.isAncestor(selectedFile(), oldPath)) {
+              setSelectedFile(file => file.replace(oldPath, newPath))
+            }
+          }}
         >
           {dirEnt => {
             const [editable, setEditable] = createSignal(false)

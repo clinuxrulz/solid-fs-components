@@ -113,6 +113,7 @@ export type FileTreeProps<T> = Pick<FileTreeContext<T>, 'fs'> &
     onDragOver?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onSelection?(paths: string[]): void
+    onRename?(oldPath: string, newPath: string): void
     selection?: Array<string>
     children: (dirEnt: DirEnt, fileTree: FileTreeContext<T>) => JSX.Element
   }
@@ -224,6 +225,24 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     return dirEntsByDir[path]?.() || []
   }
 
+  function renameDirEnt(oldPath: string, newPath: string) {
+    batch(() => {
+      props.fs.rename(oldPath, newPath)
+      props.onRename?.(oldPath, newPath)
+      setOpenedDirs(openedDirs =>
+        openedDirs.map(openedDir => {
+          if (openedDir === oldPath) {
+            return newPath
+          }
+          if (PathUtils.isAncestor(openedDir, oldPath)) {
+            return openedDir.replace(oldPath, newPath)
+          }
+          return openedDir
+        }),
+      )
+    })
+  }
+
   createEffect(
     mapArray(
       () => [config.base, ...openedDirs()],
@@ -260,8 +279,8 @@ export function FileTree<T>(props: FileTreeProps<T>) {
               get selected() {
                 return isDirEntSelected(dirEnt().path)
               },
-              rename(path: string) {
-                props.fs.rename(dirEnt().path, path)
+              rename(newPath: string) {
+                renameDirEnt(dirEnt().path, newPath)
               },
               focus() {
                 focusDirEnt(dirEnt().path)
