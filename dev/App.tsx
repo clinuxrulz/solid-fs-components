@@ -1,11 +1,11 @@
 import { Split } from '@bigmistqke/solid-grid-split'
-import { createSignal, type Component } from 'solid-js'
+import { createSignal, onMount, type Component } from 'solid-js'
 import { createFileSystem, DefaultIndentGuide, FileTree } from 'src'
 import { TmTextarea } from 'tm-textarea/solid'
 import styles from './App.module.css'
 
 const App: Component = () => {
-  const [selected, setSelected] = createSignal<string>('index0.ts')
+  const [selectedFile, setSelectedFile] = createSignal<string>('index0.ts')
 
   const fs = createFileSystem<string>()
 
@@ -30,7 +30,7 @@ const App: Component = () => {
   }
 
   const grammar = () => {
-    const _selected = selected()
+    const _selected = selectedFile()
     if (_selected?.endsWith('css')) {
       return 'css'
     }
@@ -38,6 +38,14 @@ const App: Component = () => {
       return 'html'
     }
     return 'tsx'
+  }
+
+  const currentFile = () => {
+    const _selectedFile = selectedFile()
+    if (_selectedFile && fs.exists(_selectedFile)) {
+      return fs.readFile(_selectedFile)
+    }
+    return ''
   }
 
   return (
@@ -50,6 +58,13 @@ const App: Component = () => {
         >
           {dirEnt => {
             const [editable, setEditable] = createSignal(false)
+
+            onMount(() => {
+              if (dirEnt.focused && dirEnt.type === 'file') {
+                setSelectedFile(dirEnt.path)
+              }
+            })
+
             return (
               <FileTree.DirEnt
                 class={styles.dirEnt}
@@ -58,7 +73,7 @@ const App: Component = () => {
                 }}
                 onMouseDown={() => {
                   if (dirEnt.type === 'file') {
-                    setSelected(dirEnt.path)
+                    setSelectedFile(dirEnt.path)
                   }
                 }}
                 onDblClick={() => setEditable(true)}
@@ -74,7 +89,7 @@ const App: Component = () => {
                         dirEnt.open()
                       }
                     } else {
-                      setSelected(dirEnt.path)
+                      setSelectedFile(dirEnt.path)
                     }
                   }
                 }}
@@ -100,11 +115,11 @@ const App: Component = () => {
       <Split.Handle size="5px" style={{ background: 'lightgrey', cursor: 'ew-resize' }} />
       <Split.Pane size="1fr" style={{ display: 'grid', 'grid-template-rows': '1fr auto' }}>
         <TmTextarea
-          value={selected() ? fs.readFile(selected()!) : ''}
+          value={currentFile()}
           grammar={grammar()}
           class={styles.textarea}
           theme="andromeeda"
-          onInput={event => fs.writeFile(selected()!, event.currentTarget.value)}
+          onInput={event => fs.writeFile(selectedFile()!, event.currentTarget.value)}
         />
         <input
           placeholder="p.ex fs.writeFile('test2.ts', 'Hello World!')"

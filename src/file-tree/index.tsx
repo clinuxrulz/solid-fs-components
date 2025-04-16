@@ -17,6 +17,7 @@ import {
   onMount,
   Show,
   splitProps,
+  untrack,
   useContext,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
@@ -32,6 +33,9 @@ interface DirEntBase {
   deselect(): void
   rename(path: string): void
   selected: boolean
+  focus(): void
+  blur(): void
+  focused: boolean
 }
 
 interface File extends DirEntBase {
@@ -57,6 +61,7 @@ interface FileTreeContext<T> {
   fs: Pick<FileSystem<T>, 'readdir' | 'rename' | 'exists'>
   base: string
   sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
+  // open/close
   openDir(path: string): void
   closeDir(path: string): void
   isDirOpened(path: string): boolean
@@ -68,6 +73,9 @@ interface FileTreeContext<T> {
   shiftSelectDirEnt(path: string): void
   deselectDirEnt(path: string): void
   flatTree: Accessor<DirEnt[]>
+  focusDirEnt(path: string): void
+  blurDirEnt(path: string): void
+  isDirEntFocused(path: string): boolean
 }
 
 const FileTreeContext = createContext<FileTreeContext<any>>()
@@ -111,6 +119,20 @@ export type FileTreeProps<T> = Pick<FileTreeContext<T>, 'fs'> &
 
 export function FileTree<T>(props: FileTreeProps<T>) {
   const [config, rest] = splitProps(mergeProps({ base: '' }, props), ['fs', 'base'])
+
+  const [focusedDirEnt, setFocusedDirEnt] = createSignal<string | undefined>()
+
+  function focusDirEnt(path: string) {
+    setFocusedDirEnt(path)
+  }
+
+  function blurDirEnt(path: string) {
+    if (focusedDirEnt() === path) {
+      setFocusedDirEnt()
+    }
+  }
+
+  const isDirEntFocused = createSelector(focusedDirEnt)
 
   // Selection DirEnts
   const [selectionRanges, setSelectionRanges] = createSignal<Array<[start: string, end?: string]>>(
@@ -238,6 +260,15 @@ export function FileTree<T>(props: FileTreeProps<T>) {
               },
               rename(path: string) {
                 props.fs.rename(dirEnt().path, path)
+              },
+              focus() {
+                focusDirEnt(dirEnt().path)
+              },
+              blur() {
+                blurDirEnt(dirEnt().path)
+              },
+              get focused() {
+                return isDirEntFocused(dirEnt().path)
               },
             }),
           ),
@@ -370,6 +401,9 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     shiftSelectDirEnt,
     getDirEntsOfDir,
     flatTree,
+    focusDirEnt,
+    blurDirEnt,
+    isDirEntFocused,
   })
 
   return (
@@ -389,7 +423,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           {dirEnt => {
             return (
               <DirEntContext.Provider value={dirEnt()}>
-                {props.children(dirEnt(), fileTreeContext)}
+                {untrack(() => props.children(dirEnt(), fileTreeContext))}
               </DirEntContext.Provider>
             )
           }}
@@ -402,14 +436,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 FileTree.DirEnt = function (
   props: Omit<
     ComponentProps<'button'>,
-    'onDragStart' | 'onDragOver' | 'onDrop' | 'onPointerDown'
+    'onDragStart' | 'onDragOver' | 'onDrop' | 'onPointerDown' | 'onPointerUp' | 'onFocus' | 'onBlur'
   > & {
+    ref?(element: HTMLButtonElement): void
     onDragOver?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
     onDragStart?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
     onMove?(parent: string): void
     onPointerDown?(event: WrapEvent<PointerEvent, HTMLButtonElement>): void
     onPointerUp?(event: WrapEvent<PointerEvent, HTMLButtonElement>): void
+    onFocus?(event: WrapEvent<FocusEvent, HTMLButtonElement>): void
+    onBlur?(event: WrapEvent<FocusEvent, HTMLButtonElement>): void
   },
 ) {
   const config = mergeProps({ draggable: true }, props)
@@ -459,6 +496,22 @@ FileTree.DirEnt = function (
       }
 
       props.onDrop?.(event)
+    },
+    onFocus(event: WrapEvent<FocusEvent, HTMLButtonElement>) {
+      dirEnt.focus()
+      props.onFocus?.(event)
+    },
+    onBlur(event: WrapEvent<FocusEvent, HTMLButtonElement>) {
+      dirEnt.blur()
+      props.onBlur?.(event)
+    },
+    ref(element: HTMLButtonElement) {
+      onMount(() => {
+        if (dirEnt.focused) {
+          element.focus()
+        }
+      })
+      props.ref?.(element)
     },
   }
 
@@ -569,9 +622,12 @@ FileTree.Name = function (props: {
       throw `Path ${newPath} already exists.`
     }
 
-    dirEnt.rename(newPath)
-    fileTree.resetSelection()
-    fileTree.selectDirEnt(newPath)
+    batch(() => {
+      dirEnt.rename(newPath)
+      fileTree.resetSelection()
+      fileTree.selectDirEnt(newPath)
+      fileTree.focusDirEnt(newPath)
+    })
   }
 
   return (
@@ -602,7 +658,9 @@ FileTree.Name = function (props: {
           }
         }}
         onBlur={event => {
-          rename(event.currentTarget)
+          if (fileTree.fs.exists(dirEnt.path)) {
+            rename(event.currentTarget)
+          }
           props.onBlur?.(event)
         }}
       />
