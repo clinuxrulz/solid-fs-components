@@ -621,7 +621,7 @@ FileTree.Name = function (props: {
     }
 
     if (fileTree.fs.exists(newPath)) {
-      element.value = dirEnt.path
+      element.value = dirEnt.name
       throw `Path ${newPath} already exists.`
     }
 
