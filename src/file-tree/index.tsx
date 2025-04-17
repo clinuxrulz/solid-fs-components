@@ -86,11 +86,11 @@ export function useFileTree() {
   return context
 }
 
-const DirEntContext = createContext<DirEnt>()
+const DirEntContext = createContext<{ dirEnt: Accessor<DirEnt>, }>()
 export function useDirEnt() {
   const context = useContext(DirEntContext)
   if (!context) throw `DirEntContext is undefined`
-  return context
+  return context.dirEnt()
 }
 
 const DirEntIdContext = createContext<{ id: number, }>()
@@ -569,12 +569,12 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       }}
     >
       <FileTreeContext.Provider value={fileTreeContext}>
-        <Key each={flatTree()} by={item => item.dirEnt.path}>
+        <Key each={flatTree()} by={item => item.id}>
           {dirEnt => {
             return (
               <DirEntIdContext.Provider value={{ id: dirEnt().id, }}>
-                <DirEntContext.Provider value={dirEnt().dirEnt}>
-                  {untrack(() => props.children(dirEnt().dirEnt, fileTreeContext))}
+                <DirEntContext.Provider value={{ dirEnt: () => dirEnt().dirEnt}}>
+                  {props.children(dirEnt().dirEnt, fileTreeContext)}
                 </DirEntContext.Provider>
               </DirEntIdContext.Provider>
             )
