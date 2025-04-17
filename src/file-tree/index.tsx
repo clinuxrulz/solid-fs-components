@@ -158,16 +158,14 @@ function createIdGenerator() {
       idToPathMap.set(node.id, newPath)
     },
     obtainId(path: string): number {
-      const node = nodeMap.get(path)
+      let node = nodeMap.get(path)
       if (node) {
         node.refCount++
-        addCleanup(node, path)
-        return node.id
       } else {
-        const node = createIdNode(path)
-        addCleanup(node, path)
-        return node.id
+        node = createIdNode(path)
       }
+      addCleanup(node, path)
+      return node.id
     },
     freezeId(id: number) {
       const path = idToPathMap.get(id)
