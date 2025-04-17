@@ -4,6 +4,7 @@ import {
   type Accessor,
   batch,
   type ComponentProps,
+  createComputed,
   createContext,
   createEffect,
   createMemo,
@@ -13,6 +14,7 @@ import {
   type JSX,
   mapArray,
   mergeProps,
+  on,
   onCleanup,
   onMount,
   Show,
@@ -91,6 +93,13 @@ export function useDirEnt() {
   return context
 }
 
+const DirEntIdContext = createContext<{ id: number, }>()
+export function useDirEntId() {
+  const context = useContext(DirEntIdContext)
+  if (!context) throw `DirEntIdContext is undefined`
+  return context
+}
+
 type IndentGuideKind = 'pipe' | 'tee' | 'elbow' | 'spacer'
 
 const IndentGuideContext = createContext<Accessor<IndentGuideKind>>()
@@ -145,12 +154,12 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     return selectedDirEntRanges()
       .flatMap(([start, end]) => {
         if (end) {
-          const startIndex = flatTree().findIndex(dir => dir.path === start)
-          const endIndex = flatTree().findIndex(dir => dir.path === end)
+          const startIndex = flatTree().findIndex(dir => dir.dirEnt.path === start)
+          const endIndex = flatTree().findIndex(dir => dir.dirEnt.path === end)
 
           return flatTree()
             .slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1)
-            .map(dirEnt => dirEnt.path)
+            .map(dirEnt => dirEnt.dirEnt.path)
         }
         return start
       })
@@ -306,19 +315,120 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     ),
   )
 
+  // ID Generation Middleware
+  let beforeRename: (oldPath: string, newPath: string) => void;
+  let obtainId: (path: string) => number;
+  let freezeId: (id: number) => void;
+  {
+    let allocId: () => number;
+    let disposeId: (id: number) => void;
+    {
+      let nextId = 0;
+      let freeIds: number[] = [];
+      allocId = () => {
+        return freeIds.pop() ?? nextId++;
+      };
+      disposeId = (id: number) => {
+        freeIds.push(id);
+      };
+    }
+    type Node = {
+      id: number,
+      refCount: number,
+    };
+    let nodeMap = new Map<string, Node>();
+    let idToPathMap = new Map<number, string>();
+    beforeRename = (oldPath: string, newPath: string) => {
+      let node = nodeMap.get(oldPath);
+      if (node == undefined) {
+        return;
+      }
+      nodeMap.delete(oldPath);
+      nodeMap.set(newPath, node);
+      idToPathMap.set(node.id, newPath);
+    };
+    obtainId = (path: string): number => {
+      {
+        let node = nodeMap.get(path);
+        if (node != undefined) {
+          node.refCount++;
+          onCleanup(() => {
+            queueMicrotask(() => {
+              node.refCount--;
+              if (node.refCount == 0) {
+                disposeId(node.id);
+                nodeMap.delete(path);
+                idToPathMap.delete(node.id);
+              }
+            });
+          });
+          return node.id;
+        }
+      }
+      let node = {
+        id: allocId(),
+        refCount: 1,
+      };
+      nodeMap.set(path, node);
+      idToPathMap.set(node.id, path);
+      onCleanup(() => {
+        queueMicrotask(() => {
+          node.refCount--;
+          if (node.refCount == 0) {
+            disposeId(node.id);
+            nodeMap.delete(path);
+            idToPathMap.delete(node.id);
+          }
+        });
+      });
+      return node.id;
+    };
+    freezeId = (id: number) => {
+      let path = idToPathMap.get(id);
+      if (path == undefined) {
+        return;
+      }
+      let node = nodeMap.get(path);
+      if (node != undefined) {
+        node.refCount++;
+        onCleanup(() => {
+          queueMicrotask(() => {
+            node.refCount--;
+            if (node.refCount == 0) {
+              disposeId(node.id);
+              nodeMap.delete(path);
+              idToPathMap.delete(node.id);
+            }
+          });
+        });
+      }
+    };
+  }
+
+  // Freeze ID numbers for selected entries
+  createComputed(on(
+    selectedDirEnts,
+    (selectedDirEnts2) => {
+      for (let path in selectedDirEnts2) {
+        let id = obtainId(path);
+        freezeId(id);
+      }
+    },
+  ));
+
   // DirEnts as a flat list
   const flatTree = createMemo(() => {
-    const list = new Array<DirEnt>()
+    const list = new Array<{ id: number, dirEnt: DirEnt, }>()
     const stack = [config.base]
     while (stack.length > 0) {
       const path = stack.shift()!
-      const dirEnts = getDirEntsOfDir(path)
+      const dirEnts = getDirEntsOfDir(path).map((dirEnt) => ({ id: obtainId(dirEnt.path), dirEnt, }));
       stack.push(
         ...dirEnts
-          .filter(dirEnt => dirEnt.type === 'dir' && isDirExpanded(dirEnt.path))
-          .map(dir => dir.path),
+          .filter(dirEnt => dirEnt.dirEnt.type === 'dir' && isDirExpanded(dirEnt.dirEnt.path))
+          .map(dir => dir.dirEnt.path),
       )
-      list.splice(list.findIndex(dirEnt => dirEnt.path === path) + 1, 0, ...dirEnts)
+      list.splice(list.findIndex(dirEnt => dirEnt.dirEnt.path === path) + 1, 0, ...dirEnts)
     }
     return list
   })
@@ -329,6 +439,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
   function renameDirEnt(oldPath: string, newPath: string) {
     batch(() => {
+      beforeRename(oldPath, newPath);
       props.fs.rename(oldPath, newPath)
       props.onRename?.(oldPath, newPath)
       setExpandedDirs(openedDirs => {
@@ -458,12 +569,14 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       }}
     >
       <FileTreeContext.Provider value={fileTreeContext}>
-        <Key each={flatTree()} by={item => item.path}>
+        <Key each={flatTree()} by={item => item.dirEnt.path}>
           {dirEnt => {
             return (
-              <DirEntContext.Provider value={dirEnt()}>
-                {untrack(() => props.children(dirEnt(), fileTreeContext))}
-              </DirEntContext.Provider>
+              <DirEntIdContext.Provider value={{ id: dirEnt().id, }}>
+                <DirEntContext.Provider value={dirEnt().dirEnt}>
+                  {untrack(() => props.children(dirEnt().dirEnt, fileTreeContext))}
+                </DirEntContext.Provider>
+              </DirEntIdContext.Provider>
             )
           }}
         </Key>
@@ -651,6 +764,7 @@ FileTree.Name = function (props: {
 }) {
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
+  const dirEntId = useDirEntId()
 
   function rename(element: HTMLInputElement) {
     const newPath = [...dirEnt.path.split('/').slice(0, -1), element.value].join('/')
@@ -672,7 +786,7 @@ FileTree.Name = function (props: {
       when={props.editable}
       fallback={
         <span class={props.class} style={props.style}>
-          {dirEnt.name}
+          {dirEnt.name} [ID = {dirEntId.id}]
         </span>
       }
     >
