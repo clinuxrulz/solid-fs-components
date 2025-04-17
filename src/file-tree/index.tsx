@@ -27,6 +27,7 @@ import { CTRL_KEY, Overwrite, PathUtils, type WrapEvent } from 'src/utils'
 import { type FileSystem } from '../create-file-system'
 
 interface DirEntBase {
+  id: number,
   path: string
   indentation: number
   name: string
@@ -86,18 +87,11 @@ export function useFileTree() {
   return context
 }
 
-const DirEntContext = createContext<{ dirEnt: Accessor<DirEnt>, }>()
+const DirEntContext = createContext<Accessor<DirEnt>>()
 export function useDirEnt() {
   const context = useContext(DirEntContext)
   if (!context) throw `DirEntContext is undefined`
-  return context.dirEnt()
-}
-
-const DirEntIdContext = createContext<{ id: number, }>()
-export function useDirEntId() {
-  const context = useContext(DirEntIdContext)
-  if (!context) throw `DirEntIdContext is undefined`
-  return context
+  return context()
 }
 
 type IndentGuideKind = 'pipe' | 'tee' | 'elbow' | 'spacer'
@@ -154,12 +148,12 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     return selectedDirEntRanges()
       .flatMap(([start, end]) => {
         if (end) {
-          const startIndex = flatTree().findIndex(dir => dir.dirEnt.path === start)
-          const endIndex = flatTree().findIndex(dir => dir.dirEnt.path === end)
+          const startIndex = flatTree().findIndex(dir => dir.path === start)
+          const endIndex = flatTree().findIndex(dir => dir.path === end)
 
           return flatTree()
             .slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1)
-            .map(dirEnt => dirEnt.dirEnt.path)
+            .map(dirEnt => dirEnt.path)
         }
         return start
       })
@@ -230,90 +224,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   function getDirEntsOfDir(path: string) {
     return dirEntsByDir[path]?.() || []
   }
-
-  createEffect(
-    mapArray(
-      () => [config.base, ...expandedDirs()],
-      dirPath => {
-        const unsortedDirEnts = createMemo<Array<Dir | File>>(
-          keyArray(
-            () => props.fs.readdir(dirPath, { withFileTypes: true }),
-            dirEnt => dirEnt.path,
-            dirEnt => {
-              const base: DirEntBase = {
-                path: dirEnt().path,
-                indentation: getIndentationFromPath(dirEnt().path),
-                name: PathUtils.getName(dirEnt().path)!,
-                select() {
-                  selectDirEnt(dirEnt().path)
-                },
-                deselect() {
-                  deselectDirEnt(dirEnt().path)
-                },
-                shiftSelect() {
-                  shiftSelectDirEnt(dirEnt().path)
-                },
-                get selected() {
-                  return isDirEntSelected(dirEnt().path)
-                },
-                rename(newPath: string) {
-                  renameDirEnt(dirEnt().path, newPath)
-                },
-                focus() {
-                  focusDirEnt(dirEnt().path)
-                },
-                blur() {
-                  blurDirEnt(dirEnt().path)
-                },
-                get focused() {
-                  return isDirEntFocused(dirEnt().path)
-                },
-              }
-
-              return mergeProps(base, () =>
-                dirEnt().type === 'dir'
-                  ? {
-                      type: 'dir' as const,
-                      expand() {
-                        expandDir(dirEnt().path)
-                      },
-                      collapse() {
-                        collapseDir(dirEnt().path)
-                      },
-                      get expanded() {
-                        return isDirExpanded(dirEnt().path)
-                      },
-                    }
-                  : { type: 'file' as const },
-              )
-            },
-          ),
-        )
-
-        const sortedDirEnts = createMemo(() =>
-          unsortedDirEnts().toSorted(
-            props.sort ??
-              ((a, b) => {
-                if (a.type !== b.type) {
-                  return a.type === 'dir' ? -1 : 1
-                }
-                return a.path.toLowerCase() < b.path.toLowerCase() ? -1 : 1
-              }),
-          ),
-        )
-
-        setDirEntsByDir(dirPath, () => sortedDirEnts)
-        onCleanup(() => setDirEntsByDir(dirPath, undefined!))
-
-        // Remove path from opened paths if it ceases to fs.exist
-        createRenderEffect(() => {
-          if (!props.fs.exists(dirPath)) {
-            setExpandedDirs(dirs => dirs.filter(dir => dir !== dirPath))
-          }
-        })
-      },
-    ),
-  )
 
   // ID Generation Middleware
   let beforeRename: (oldPath: string, newPath: string) => void;
@@ -405,6 +315,106 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     };
   }
 
+  // Populate dirEntsByDir
+  createEffect(
+    mapArray(
+      () => [config.base, ...expandedDirs()],
+      dirPath => {
+        const unsortedDirEnts = createMemo<Array<Dir | File>>(
+          keyArray(
+            () => props.fs.readdir(dirPath, { withFileTypes: true }).map(dirEnt => ({ id: obtainId(dirEnt.path), dirEnt, })),
+            dirEnt => dirEnt.id,
+            dirEnt_ => {
+              const id = dirEnt_().id;
+              const dirEnt = () => dirEnt_().dirEnt;
+              const indentation = createMemo(() =>
+                getIndentationFromPath(dirEnt().path)
+              );
+              const name = createMemo(() =>
+                PathUtils.getName(dirEnt().path)!
+              );
+              const base: DirEntBase = {
+                id,
+                get path() {
+                  return dirEnt().path;
+                },
+                get indentation() {
+                  return indentation()
+                },
+                get name() {
+                  return name()
+                },
+                select() {
+                  selectDirEnt(dirEnt().path)
+                },
+                deselect() {
+                  deselectDirEnt(dirEnt().path)
+                },
+                shiftSelect() {
+                  shiftSelectDirEnt(dirEnt().path)
+                },
+                get selected() {
+                  return isDirEntSelected(dirEnt().path)
+                },
+                rename(newPath: string) {
+                  renameDirEnt(dirEnt().path, newPath)
+                },
+                focus() {
+                  focusDirEnt(dirEnt().path)
+                },
+                blur() {
+                  blurDirEnt(dirEnt().path)
+                },
+                get focused() {
+                  return isDirEntFocused(dirEnt().path)
+                },
+              }
+
+              return mergeProps(base, () =>
+                dirEnt().type === 'dir'
+                  ? {
+                      type: 'dir' as const,
+                      expand() {
+                        expandDir(dirEnt().path)
+                      },
+                      collapse() {
+                        collapseDir(dirEnt().path)
+                      },
+                      get expanded() {
+                        return isDirExpanded(dirEnt().path)
+                      },
+                    }
+                  : { type: 'file' as const },
+              )
+            },
+          ),
+        )
+
+        const sortedDirEnts = createMemo(() =>
+          unsortedDirEnts().toSorted(
+            props.sort ??
+              ((a, b) => {
+                if (a.type !== b.type) {
+                  return a.type === 'dir' ? -1 : 1
+                }
+                return a.path.toLowerCase() < b.path.toLowerCase() ? -1 : 1
+              }),
+          ),
+        )
+
+        setDirEntsByDir(dirPath, () => sortedDirEnts)
+        onCleanup(() => setDirEntsByDir(dirPath, undefined!))
+
+        // Remove path from opened paths if it ceases to fs.exist
+        createRenderEffect(() => {
+          if (!props.fs.exists(dirPath)) {
+            setExpandedDirs(dirs => dirs.filter(dir => dir !== dirPath))
+          }
+        })
+      },
+    ),
+  )
+
   // Freeze ID numbers for selected entries
   createComputed(on(
     selectedDirEnts,
@@ -418,17 +428,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
   // DirEnts as a flat list
   const flatTree = createMemo(() => {
-    const list = new Array<{ id: number, dirEnt: DirEnt, }>()
+    const list = new Array<DirEnt>()
     const stack = [config.base]
     while (stack.length > 0) {
       const path = stack.shift()!
-      const dirEnts = getDirEntsOfDir(path).map((dirEnt) => ({ id: obtainId(dirEnt.path), dirEnt, }));
+      const dirEnts = getDirEntsOfDir(path);
       stack.push(
         ...dirEnts
-          .filter(dirEnt => dirEnt.dirEnt.type === 'dir' && isDirExpanded(dirEnt.dirEnt.path))
-          .map(dir => dir.dirEnt.path),
+          .filter(dirEnt => dirEnt.type === 'dir' && isDirExpanded(dirEnt.path))
+          .map(dir => dir.path),
       )
-      list.splice(list.findIndex(dirEnt => dirEnt.dirEnt.path === path) + 1, 0, ...dirEnts)
+      list.splice(list.findIndex(dirEnt => dirEnt.path === path) + 1, 0, ...dirEnts)
     }
     return list
   })
@@ -572,11 +582,9 @@ export function FileTree<T>(props: FileTreeProps<T>) {
         <Key each={flatTree()} by={item => item.id}>
           {dirEnt => {
             return (
-              <DirEntIdContext.Provider value={{ id: dirEnt().id, }}>
-                <DirEntContext.Provider value={{ dirEnt: () => dirEnt().dirEnt}}>
-                  {props.children(dirEnt().dirEnt, fileTreeContext)}
-                </DirEntContext.Provider>
-              </DirEntIdContext.Provider>
+              <DirEntContext.Provider value={dirEnt}>
+                {props.children(dirEnt(), fileTreeContext)}
+              </DirEntContext.Provider>
             )
           }}
         </Key>
@@ -764,7 +772,6 @@ FileTree.Name = function (props: {
 }) {
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
-  const dirEntId = useDirEntId()
 
   function rename(element: HTMLInputElement) {
     const newPath = [...dirEnt.path.split('/').slice(0, -1), element.value].join('/')
@@ -786,7 +793,7 @@ FileTree.Name = function (props: {
       when={props.editable}
       fallback={
         <span class={props.class} style={props.style}>
-          {dirEnt.name} [ID = {dirEntId.id}]
+          {dirEnt.name} [ID = {dirEnt.id}]
         </span>
       }
     >
