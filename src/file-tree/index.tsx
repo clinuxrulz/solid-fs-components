@@ -4,7 +4,6 @@ import {
   type Accessor,
   batch,
   type ComponentProps,
-  createComputed,
   createContext,
   createEffect,
   createMemo,
@@ -115,8 +114,10 @@ type IdNode = {
 
 // ID Generation Middleware
 function createIdGenerator() {
+  const freeIds: Array<number> = []
+  const nodeMap = new Map<string, IdNode>()
+  const idToPathMap = new Map<number, string>()
   let nextId = 0
-  const freeIds: number[] = []
 
   function allocId() {
     return freeIds.pop() ?? nextId++
@@ -124,13 +125,22 @@ function createIdGenerator() {
   function disposeId(id: number) {
     freeIds.push(id)
   }
-
-  let nodeMap = new Map<string, IdNode>()
-  let idToPathMap = new Map<number, string>()
+  function addCleanup(node: IdNode, path: string) {
+    onCleanup(() => {
+      queueMicrotask(() => {
+        node.refCount--
+        if (node.refCount == 0) {
+          disposeId(node.id)
+          nodeMap.delete(path)
+          idToPathMap.delete(node.id)
+        }
+      })
+    })
+  }
 
   return {
     beforeRename(oldPath: string, newPath: string) {
-      let node = nodeMap.get(oldPath)
+      const node = nodeMap.get(oldPath)
       if (node == undefined) {
         return
       }
@@ -142,16 +152,7 @@ function createIdGenerator() {
       const node = nodeMap.get(path)
       if (node) {
         node.refCount++
-        onCleanup(() => {
-          queueMicrotask(() => {
-            node.refCount--
-            if (node.refCount == 0) {
-              disposeId(node.id)
-              nodeMap.delete(path)
-              idToPathMap.delete(node.id)
-            }
-          })
-        })
+        addCleanup(node, path)
         return node.id
       } else {
         const node = {
@@ -160,37 +161,19 @@ function createIdGenerator() {
         }
         nodeMap.set(path, node)
         idToPathMap.set(node.id, path)
-        onCleanup(() => {
-          queueMicrotask(() => {
-            node.refCount--
-            if (node.refCount == 0) {
-              disposeId(node.id)
-              nodeMap.delete(path)
-              idToPathMap.delete(node.id)
-            }
-          })
-        })
+        addCleanup(node, path)
         return node.id
       }
     },
     freezeId(id: number) {
-      let path = idToPathMap.get(id)
+      const path = idToPathMap.get(id)
       if (path == undefined) {
         return
       }
-      let node = nodeMap.get(path)
+      const node = nodeMap.get(path)
       if (node != undefined) {
         node.refCount++
-        onCleanup(() => {
-          queueMicrotask(() => {
-            node.refCount--
-            if (node.refCount == 0) {
-              disposeId(node.id)
-              nodeMap.delete(path)
-              idToPathMap.delete(node.id)
-            }
-          })
-        })
+        addCleanup(node, path)
       }
     },
   }
@@ -295,6 +278,16 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       )
     })
   })
+
+  // Freeze ID numbers for selected entries
+  createEffect(
+    on(selectedDirEnts, selectedDirEnts => {
+      for (let path in selectedDirEnts) {
+        let id = obtainId(path)
+        freezeId(id)
+      }
+    }),
+  )
 
   // Expand/Collapse Dirs
   const [expandedDirs, setExpandedDirs] = createSignal<Array<string>>(new Array(), {
@@ -417,16 +410,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
         })
       },
     ),
-  )
-
-  // Freeze ID numbers for selected entries
-  createComputed(
-    on(selectedDirEnts, selectedDirEnts2 => {
-      for (let path in selectedDirEnts2) {
-        let id = obtainId(path)
-        freezeId(id)
-      }
-    }),
   )
 
   // DirEnts as a flat list
