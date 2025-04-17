@@ -21,7 +21,7 @@ import {
   useContext,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
-import { isMac, lastItem, PathUtils, type WrapEvent } from 'src/utils'
+import { CTRL_KEY, PathUtils, type WrapEvent } from 'src/utils'
 import { type FileSystem } from '../create-file-system'
 
 interface DirEntBase {
@@ -44,9 +44,9 @@ interface File extends DirEntBase {
 
 interface Dir extends DirEntBase {
   type: 'dir'
-  open(): void
-  close(): void
-  opened: boolean
+  expand(): void
+  collapse(): void
+  expanded: boolean
 }
 
 type DirEnt = File | Dir
@@ -60,19 +60,18 @@ type DirEnt = File | Dir
 interface FileTreeContext<T> {
   fs: Pick<FileSystem<T>, 'readdir' | 'rename' | 'exists'>
   base: string
-  sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
-  // open/close
-  openDir(path: string): void
-  closeDir(path: string): void
-  isDirOpened(path: string): boolean
-  indentationFromPath(path: string): number
   getDirEntsOfDir(path: string): Array<DirEnt>
-  resetSelection(): void
-  moveSelection(path: string): void
+  // Expand/Collapse
+  expandDir(path: string): void
+  collapseDir(path: string): void
+  isDirExpanded(path: string): boolean
+  // Selection
+  resetSelectedDirEnts(): void
+  moveSelectedDirEnts(path: string): void
   selectDirEnt(path: string): void
   shiftSelectDirEnt(path: string): void
   deselectDirEnt(path: string): void
-  flatTree: Accessor<DirEnt[]>
+  // Focus
   focusDirEnt(path: string): void
   blurDirEnt(path: string): void
   isDirEntFocused(path: string): boolean
@@ -108,8 +107,9 @@ export function useIndentGuide() {
 /**********************************************************************************/
 
 export type FileTreeProps<T> = Pick<FileTreeContext<T>, 'fs'> &
-  Partial<Pick<FileTreeContext<T>, 'base' | 'sort'>> &
-  Omit<ComponentProps<'div'>, 'children' | 'onPointerUp'> & {
+  Omit<ComponentProps<'div'>, 'children' | 'onPointerUp' | 'onDragOver' | 'onDrop'> & {
+    base?: string
+    sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
     onDragOver?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onSelection?(paths: string[]): void
@@ -136,18 +136,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   const isDirEntFocused = createSelector(focusedDirEnt)
 
   // Selection DirEnts
-  const [selectionRanges, setSelectionRanges] = createSignal<Array<[start: string, end?: string]>>(
-    [],
-    { equals: false },
-  )
+  const [selectedDirEntRanges, setSelectedDirEntRanges] = createSignal<
+    Array<[start: string, end?: string]>
+  >([], { equals: false })
 
   // Selection methods
   function selectDirEnt(path: string) {
-    setSelectionRanges(dirEnts => [...dirEnts, [path]])
+    setSelectedDirEntRanges(dirEnts => [...dirEnts, [path]])
   }
 
   function deselectDirEnt(path: string) {
-    setSelectionRanges(
+    setSelectedDirEntRanges(
       pairs =>
         pairs
           .map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== path))
@@ -156,7 +155,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   function shiftSelectDirEnt(path: string) {
-    setSelectionRanges(dirEnts => {
+    setSelectedDirEntRanges(dirEnts => {
       if (dirEnts.length > 0) {
         dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], path]
         return [...dirEnts]
@@ -165,12 +164,12 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     })
   }
 
-  function resetSelection() {
-    setSelectionRanges([])
+  function resetSelectedDirEnts() {
+    setSelectedDirEntRanges([])
   }
 
-  const dirEntSelection = createMemo(() => {
-    return selectionRanges()
+  const selectedDirEnts = createMemo(() => {
+    return selectedDirEntRanges()
       .flatMap(([start, end]) => {
         if (end) {
           const startIndex = flatTree().findIndex(dir => dir.path === start)
@@ -185,36 +184,38 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       .sort((a, b) => (a < b ? -1 : 1))
   })
 
-  const isDirEntSelected = createSelector(dirEntSelection, (path: string, dirs) =>
+  const isDirEntSelected = createSelector(selectedDirEnts, (path: string, dirs) =>
     dirs.includes(path),
   )
 
   // Call event handler with current selection
-  createEffect(() => props.onSelection?.(dirEntSelection()))
+  createEffect(() => props.onSelection?.(selectedDirEnts()))
 
   // Update selection from props
   createEffect(() => {
     batch(() => {
       if (!props.selection) return
-      resetSelection()
+      resetSelectedDirEnts()
       const ranges = props.selection
         .filter(path => props.fs.exists(path))
         .map(path => [path] as [string])
-      setSelectionRanges(ranges)
+      setSelectedDirEntRanges(ranges)
     })
   })
 
-  // Open/Close Dirs
-  const [openedDirs, setOpenedDirs] = createSignal<Array<string>>(new Array(), {
+  // Expand/Collapse Dirs
+  const [expandedDirs, setExpandedDirs] = createSignal<Array<string>>(new Array(), {
     equals: false,
   })
-  const isDirOpened = createSelector(openedDirs, (path: string, dirs) => dirs.includes(path))
-  function closeDir(path: string) {
-    setOpenedDirs(dirs => dirs.filter(dir => dir !== path))
+  const isDirExpanded = createSelector(expandedDirs, (path: string, expandedDirs) =>
+    expandedDirs.includes(path),
+  )
+  function collapseDir(path: string) {
+    setExpandedDirs(dirs => dirs.filter(dir => dir !== path))
   }
-  function openDir(path: string) {
-    if (path !== config.base && !openedDirs().includes(path)) {
-      setOpenedDirs(dirs => [...dirs, path])
+  function expandDir(path: string) {
+    if (path !== config.base && !expandedDirs().includes(path)) {
+      setExpandedDirs(dirs => [...dirs, path])
     }
   }
 
@@ -225,81 +226,74 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     return dirEntsByDir[path]?.() || []
   }
 
-  function renameDirEnt(oldPath: string, newPath: string) {
-    batch(() => {
-      props.fs.rename(oldPath, newPath)
-      props.onRename?.(oldPath, newPath)
-      setOpenedDirs(openedDirs =>
-        openedDirs.map(openedDir => {
-          if (openedDir === oldPath) {
-            return newPath
-          }
-          if (PathUtils.isAncestor(openedDir, oldPath)) {
-            return openedDir.replace(oldPath, newPath)
-          }
-          return openedDir
-        }),
-      )
-    })
-  }
-
   createEffect(
     mapArray(
-      () => [config.base, ...openedDirs()],
+      () => [config.base, ...expandedDirs()],
       dirPath => {
-        const unsortedDirEnts = createMemo(
+        const unsortedDirEnts = createMemo<Array<Dir | File>>(
           keyArray(
             () => props.fs.readdir(dirPath, { withFileTypes: true }),
             dirEnt => dirEnt.path,
-            dirEnt => ({
-              path: dirEnt().path,
-              indentation: indentationFromPath(dirEnt().path),
-              name: PathUtils.getName(dirEnt().path),
-              get type() {
-                return dirEnt().type
-              },
-              open() {
-                openDir(dirEnt().path)
-              },
-              close() {
-                closeDir(dirEnt().path)
-              },
-              get opened() {
-                return isDirOpened(dirEnt().path)
-              },
-              select() {
-                selectDirEnt(dirEnt().path)
-              },
-              deselect() {
-                deselectDirEnt(dirEnt().path)
-              },
-              shiftSelect() {
-                shiftSelectDirEnt(dirEnt().path)
-              },
-              get selected() {
-                return isDirEntSelected(dirEnt().path)
-              },
-              rename(newPath: string) {
-                renameDirEnt(dirEnt().path, newPath)
-              },
-              focus() {
-                focusDirEnt(dirEnt().path)
-              },
-              blur() {
-                blurDirEnt(dirEnt().path)
-              },
-              get focused() {
-                return isDirEntFocused(dirEnt().path)
-              },
-            }),
+            dirEnt => {
+              const base: DirEntBase = {
+                path: dirEnt().path,
+                indentation: getIndentationFromPath(dirEnt().path),
+                name: PathUtils.getName(dirEnt().path)!,
+                select() {
+                  selectDirEnt(dirEnt().path)
+                },
+                deselect() {
+                  deselectDirEnt(dirEnt().path)
+                },
+                shiftSelect() {
+                  shiftSelectDirEnt(dirEnt().path)
+                },
+                get selected() {
+                  return isDirEntSelected(dirEnt().path)
+                },
+                rename(newPath: string) {
+                  renameDirEnt(dirEnt().path, newPath)
+                },
+                focus() {
+                  focusDirEnt(dirEnt().path)
+                },
+                blur() {
+                  blurDirEnt(dirEnt().path)
+                },
+                get focused() {
+                  return isDirEntFocused(dirEnt().path)
+                },
+              }
+
+              return mergeProps(base, () =>
+                dirEnt().type === 'dir'
+                  ? {
+                      type: 'dir' as const,
+                      expand() {
+                        expandDir(dirEnt().path)
+                      },
+                      collapse() {
+                        collapseDir(dirEnt().path)
+                      },
+                      get expanded() {
+                        return isDirExpanded(dirEnt().path)
+                      },
+                    }
+                  : { type: 'file' as const },
+              )
+            },
           ),
         )
 
         const sortedDirEnts = createMemo(() =>
           unsortedDirEnts().toSorted(
             props.sort ??
-              ((a, b) =>
-                a.type !== b.type ? (a.type === 'dir' ? -1 : 1) : a.path < b.path ? -1 : 1),
+              ((a, b) => {
+                if (a.type !== b.type) {
+                  return a.type === 'dir' ? -1 : 1
+                }
+                return a.path.toLowerCase() < b.path.toLowerCase() ? -1 : 1
+              }),
           ),
         )
 
@@ -309,7 +303,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
         // Remove path from opened paths if it ceases to fs.exist
         createRenderEffect(() => {
           if (!props.fs.exists(dirPath)) {
-            setOpenedDirs(dirs => dirs.filter(dir => dir !== dirPath))
+            setExpandedDirs(dirs => dirs.filter(dir => dir !== dirPath))
           }
         })
       },
@@ -325,7 +319,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       const dirEnts = getDirEntsOfDir(path)
       stack.push(
         ...dirEnts
-          .filter(dirEnt => dirEnt.type === 'dir' && isDirOpened(dirEnt.path))
+          .filter(dirEnt => dirEnt.type === 'dir' && isDirExpanded(dirEnt.path))
           .map(dir => dir.path),
       )
       list.splice(list.findIndex(dirEnt => dirEnt.path === path) + 1, 0, ...dirEnts)
@@ -333,12 +327,37 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     return list
   })
 
-  function indentationFromPath(path: string) {
+  function getIndentationFromPath(path: string) {
     return path.split('/').length - config.base.split('/').length
   }
 
-  function moveSelection(target: string) {
-    const selection = dirEntSelection()
+  function renameDirEnt(oldPath: string, newPath: string) {
+    batch(() => {
+      props.fs.rename(oldPath, newPath)
+      props.onRename?.(oldPath, newPath)
+      setExpandedDirs(openedDirs => {
+        return openedDirs.map(openedDir => {
+          if (openedDir === oldPath) {
+            return newPath
+          }
+          return PathUtils.rebase(openedDir, oldPath, newPath)
+        })
+      })
+      setSelectedDirEntRanges(ranges => {
+        return ranges.map(([start, end]) => {
+          start = PathUtils.rebase(start, oldPath, newPath)
+          if (end) {
+            return [start, PathUtils.rebase(end, oldPath, newPath)]
+          }
+          return [start]
+        })
+      })
+      focusDirEnt(newPath)
+    })
+  }
+
+  function moveSelectedDirEnts(target: string) {
+    const selection = selectedDirEnts()
 
     // Validate if any of the selected paths are ancestor of the target path
     for (const selected of selection) {
@@ -353,7 +372,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     const existingPaths = new Array<{ newPath: string; oldPath: string }>()
 
     const transforms = selection
-      .sort((a, b) => (a < b ? -1 : 1))
+      .sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : 1))
       .map((oldPath, index, arr) => {
         const ancestor = arr.slice(0, index).find(path => PathUtils.isAncestor(oldPath, path))
 
@@ -361,8 +380,8 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           ancestor
             ? // If the selection contains an ancestor of the current path
               // the path is renamed relative to the ancestor
-              [target, lastItem(ancestor.split('/')), oldPath.replace(`${ancestor}/`, '')]
-            : [target, lastItem(oldPath.split('/'))]
+              [target, PathUtils.getName(ancestor), oldPath.replace(`${ancestor}/`, '')]
+            : [target, PathUtils.getName(oldPath)]
         )
           .filter(Boolean)
           .join('/')
@@ -378,10 +397,10 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       throw `Paths already exist: ${existingPaths.map(({ newPath }) => newPath)}`
     }
 
-    // TODO: this does assume that filesystem manipulations are immediately reflected
+    // Apply transforms
     batch(() => {
       // Rename the opened dirs (before they are cleaned up)
-      setOpenedDirs(dirs =>
+      setExpandedDirs(dirs =>
         dirs.map(dir => {
           const transform = transforms.find(({ oldPath }) => oldPath === dir)
 
@@ -394,38 +413,41 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       )
 
       // Rename the dirEnts in the selection (before they are cleaned up)
-      setSelectionRanges(() => transforms.map(({ newPath }) => [newPath]))
+      setSelectedDirEntRanges(() => transforms.map(({ newPath }) => [newPath]))
 
       // Rename the dirEnt in the fileSystem
       transforms.forEach(({ oldPath, newPath, shouldRename }) => {
-        if (shouldRename) {
-          props.fs.rename(oldPath, newPath)
-        }
+        if (!shouldRename) return
+        renameDirEnt(oldPath, newPath)
       })
 
-      // Open the target-dir if it wasn't opened yet
-      if (!isDirOpened(target)) {
-        openDir(target)
+      // Expand the target-dir (if it wasn't opened yet)
+      if (!isDirExpanded(target)) {
+        expandDir(target)
       }
     })
   }
 
-  const fileTreeContext: FileTreeContext<T> = mergeProps(config, {
-    openDir,
-    closeDir,
-    indentationFromPath,
-    isDirOpened,
-    moveSelection,
-    resetSelection,
+  const fileTreeContext: FileTreeContext<T> = {
+    get fs() {
+      return config.fs
+    },
+    get base() {
+      return config.base
+    },
+    expandDir,
+    collapseDir,
+    isDirExpanded,
+    moveSelectedDirEnts,
+    resetSelectedDirEnts,
     selectDirEnt,
     deselectDirEnt,
     shiftSelectDirEnt,
     getDirEntsOfDir,
-    flatTree,
     focusDirEnt,
     blurDirEnt,
     isDirEntFocused,
-  })
+  }
 
   return (
     <div
@@ -435,7 +457,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
         props.onDragOver?.(event)
       }}
       onDrop={event => {
-        moveSelection(config.base)
+        moveSelectedDirEnts(config.base)
         props.onDrop?.(event)
       }}
     >
@@ -482,21 +504,23 @@ FileTree.DirEnt = function (
         const selected = dirEnt.selected
         if (!selected) {
           batch(() => {
-            if (isMac ? !event.metaKey : !event.ctrlKey) {
-              fileTree.resetSelection()
+            if (!event[CTRL_KEY]) {
+              fileTree.resetSelectedDirEnts()
             }
             dirEnt.select()
           })
+        } else if (event[CTRL_KEY]) {
+          dirEnt.deselect()
         }
       }
       props.onPointerDown?.(event)
     },
     onPointerUp(event: WrapEvent<PointerEvent, HTMLButtonElement>) {
       if (dirEnt.type === 'dir') {
-        if (fileTree.isDirOpened(dirEnt.path)) {
-          dirEnt.close()
+        if (dirEnt.expanded) {
+          dirEnt.collapse()
         } else {
-          dirEnt.open()
+          dirEnt.expand()
         }
       }
       props.onPointerUp?.(event)
@@ -510,10 +534,10 @@ FileTree.DirEnt = function (
       event.stopPropagation()
 
       if (dirEnt.type === 'dir') {
-        fileTree.moveSelection(dirEnt.path)
+        fileTree.moveSelectedDirEnts(dirEnt.path)
       } else {
         const parent = dirEnt.path.split('/').slice(0, -1).join('/')
-        fileTree.moveSelection(parent)
+        fileTree.moveSelectedDirEnts(parent)
       }
 
       props.onDrop?.(event)
@@ -603,20 +627,20 @@ FileTree.IndentGuides = function (props: {
   )
 }
 
-FileTree.Opened = function (
+FileTree.Expanded = function (
   props: ComponentProps<'span'> & {
-    opened: JSX.Element
-    closed: JSX.Element
+    expanded: JSX.Element
+    collapsed: JSX.Element
   },
 ) {
-  const [, rest] = splitProps(props, ['closed', 'opened'])
+  const [, rest] = splitProps(props, ['expanded', 'collapsed'])
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
   return (
     <Show when={dirEnt.type === 'dir'}>
       <span {...rest}>
-        <Show when={fileTree.isDirOpened(dirEnt.path)} fallback={props.opened}>
-          {props.closed}
+        <Show when={fileTree.isDirExpanded(dirEnt.path)} fallback={props.expanded}>
+          {props.collapsed}
         </Show>
       </span>
     </Show>
@@ -646,9 +670,6 @@ FileTree.Name = function (props: {
 
     batch(() => {
       dirEnt.rename(newPath)
-      fileTree.resetSelection()
-      fileTree.selectDirEnt(newPath)
-      fileTree.focusDirEnt(newPath)
     })
   }
 

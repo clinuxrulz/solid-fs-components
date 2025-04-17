@@ -75,7 +75,7 @@ const App: Component = () => {
               <FileTree.DirEnt
                 class={styles.dirEnt}
                 style={{
-                  background: dirEnt.selected ? '#484f6c' : 'none',
+                  background: dirEnt.selected ? '#484f6c' : undefined,
                 }}
                 onMouseDown={() => {
                   if (dirEnt.type === 'file') {
@@ -89,10 +89,10 @@ const App: Component = () => {
                   }
                   if (e.code === 'Space') {
                     if (dirEnt.type === 'dir') {
-                      if (dirEnt.opened) {
-                        dirEnt.close()
+                      if (dirEnt.expanded) {
+                        dirEnt.collapse()
                       } else {
-                        dirEnt.open()
+                        dirEnt.expand()
                       }
                     } else {
                       setSelectedFile(dirEnt.path)
@@ -103,9 +103,9 @@ const App: Component = () => {
                 <FileTree.IndentGuides
                   guide={() => <DefaultIndentGuide color="white" width={15} />}
                 />
-                <FileTree.Opened
-                  closed="-"
-                  opened="+"
+                <FileTree.Expanded
+                  collapsed="-"
+                  expanded="+"
                   style={{ width: '15px', 'text-align': 'center' }}
                 />
                 <FileTree.Name

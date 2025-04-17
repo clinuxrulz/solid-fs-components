@@ -5,7 +5,7 @@ import styles from './defaults.module.css'
 export function DefaultIndentGuide(props: { color: string; width: number }) {
   const indentGuide = useIndentGuide()
   return (
-    <span style={{ '--color': props.color, position: 'relative', width: `${props.width}px` }}>
+    <span class={styles.container} style={{ '--color': props.color, width: `${props.width}px` }}>
       <Switch>
         <Match when={indentGuide() === 'elbow'}>
           <span class={styles.elbow} />

@@ -1,3 +1,7 @@
+.container {
+  position: relative;
+}
+
 .elbow {
   position: absolute;
   left: calc(50% - 0.5px);

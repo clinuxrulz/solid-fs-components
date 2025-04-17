@@ -14,6 +14,12 @@ export const PathUtils = {
     const ancestorParts = ancestor.split('/')
     return ancestorParts.every((part, index) => part === pathParts[index])
   },
+  rebase(path: string, from: string, to: string) {
+    if (PathUtils.isAncestor(path, from) || path === from) {
+      return path.replace(from, to)
+    }
+    return path
+  },
 }
 
 export function lastItem<T>(arr: Array<T>): T | undefined {
@@ -21,6 +27,7 @@ export function lastItem<T>(arr: Array<T>): T | undefined {
 }
 
 export const isMac = navigator.platform.startsWith('Mac')
+export const CTRL_KEY = isMac ? 'metaKey' : 'ctrlKey'
 
 export type WrapEvent<TEvent, TCurrentTarget> = TEvent & {
   currentTarget: TCurrentTarget
