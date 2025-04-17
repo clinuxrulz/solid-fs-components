@@ -119,6 +119,15 @@ function createIdGenerator() {
   const idToPathMap = new Map<number, string>()
   let nextId = 0
 
+  function createIdNode(path: string) {
+    const node = {
+      id: allocId(),
+      refCount: 1,
+    }
+    nodeMap.set(path, node)
+    idToPathMap.set(node.id, path)
+    return node
+  }
   function allocId() {
     return freeIds.pop() ?? nextId++
   }
@@ -129,7 +138,7 @@ function createIdGenerator() {
     onCleanup(() => {
       queueMicrotask(() => {
         node.refCount--
-        if (node.refCount == 0) {
+        if (node.refCount === 0) {
           disposeId(node.id)
           nodeMap.delete(path)
           idToPathMap.delete(node.id)
@@ -141,7 +150,7 @@ function createIdGenerator() {
   return {
     beforeRename(oldPath: string, newPath: string) {
       const node = nodeMap.get(oldPath)
-      if (node == undefined) {
+      if (node === undefined) {
         return
       }
       nodeMap.delete(oldPath)
@@ -155,12 +164,7 @@ function createIdGenerator() {
         addCleanup(node, path)
         return node.id
       } else {
-        const node = {
-          id: allocId(),
-          refCount: 1,
-        }
-        nodeMap.set(path, node)
-        idToPathMap.set(node.id, path)
+        const node = createIdNode(path)
         addCleanup(node, path)
         return node.id
       }
@@ -171,7 +175,7 @@ function createIdGenerator() {
         return
       }
       const node = nodeMap.get(path)
-      if (node != undefined) {
+      if (node !== undefined) {
         node.refCount++
         addCleanup(node, path)
       }
