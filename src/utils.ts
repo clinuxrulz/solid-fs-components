@@ -33,3 +33,9 @@ export type WrapEvent<TEvent, TCurrentTarget> = TEvent & {
   currentTarget: TCurrentTarget
   target: Element
 }
+
+export type Overwrite<TTarget, TSource extends Record<string, unknown>> = Omit<
+  TTarget,
+  keyof TSource
+> &
+  TSource

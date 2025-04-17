@@ -1,8 +1,8 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { createSignal, onMount, type Component } from 'solid-js'
-import { createFileSystem, DefaultIndentGuide, FileTree } from 'src'
 import { PathUtils } from 'src/utils'
 import { TmTextarea } from 'tm-textarea/solid'
+import { createFileSystem, DefaultIndentGuide, FileTree } from '../src'
 import styles from './App.module.css'
 
 const App: Component = () => {
@@ -55,12 +55,9 @@ const App: Component = () => {
         <FileTree
           fs={fs}
           class={styles.custom}
-          onSelection={paths => console.log('onSelection', paths)}
-          onRename={(oldPath, newPath) => {
-            if (oldPath === selectedFile() || PathUtils.isAncestor(selectedFile(), oldPath)) {
-              setSelectedFile(file => file.replace(oldPath, newPath))
-            }
-          }}
+          onRename={(oldPath, newPath) =>
+            setSelectedFile(file => PathUtils.rebase(file, oldPath, newPath))
+          }
         >
           {dirEnt => {
             const [editable, setEditable] = createSignal(false)
@@ -77,31 +74,33 @@ const App: Component = () => {
                 style={{
                   background: dirEnt.selected ? '#484f6c' : undefined,
                 }}
+                onDblClick={() => setEditable(true)}
                 onMouseDown={() => {
                   if (dirEnt.type === 'file') {
                     setSelectedFile(dirEnt.path)
                   }
                 }}
-                onDblClick={() => setEditable(true)}
                 onKeyDown={e => {
-                  if (e.code === 'Enter') {
-                    setEditable(editable => !editable)
-                  }
-                  if (e.code === 'Space') {
-                    if (dirEnt.type === 'dir') {
-                      if (dirEnt.expanded) {
-                        dirEnt.collapse()
+                  switch (e.code) {
+                    case 'Enter':
+                      setEditable(editable => !editable)
+                      break
+                    case 'Space':
+                      if (dirEnt.type === 'dir') {
+                        if (dirEnt.expanded) {
+                          dirEnt.collapse()
+                        } else {
+                          dirEnt.expand()
+                        }
                       } else {
-                        dirEnt.expand()
+                        setSelectedFile(dirEnt.path)
                       }
-                    } else {
-                      setSelectedFile(dirEnt.path)
-                    }
+                      break
                   }
                 }}
               >
                 <FileTree.IndentGuides
-                  guide={() => <DefaultIndentGuide color="white" width={15} />}
+                  render={() => <DefaultIndentGuide color="white" width={15} />}
                 />
                 <FileTree.Expanded
                   collapsed="-"

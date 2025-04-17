@@ -21,7 +21,7 @@ import {
   useContext,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
-import { CTRL_KEY, PathUtils, type WrapEvent } from 'src/utils'
+import { CTRL_KEY, Overwrite, PathUtils, type WrapEvent } from 'src/utils'
 import { type FileSystem } from '../create-file-system'
 
 interface DirEntBase {
@@ -106,68 +106,41 @@ export function useIndentGuide() {
 /*                                                                                */
 /**********************************************************************************/
 
-export type FileTreeProps<T> = Pick<FileTreeContext<T>, 'fs'> &
-  Omit<ComponentProps<'div'>, 'children' | 'onPointerUp' | 'onDragOver' | 'onDrop'> & {
+export type FileTreeProps<T> = Overwrite<
+  ComponentProps<'div'>,
+  {
     base?: string
-    sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
+    children: (dirEnt: DirEnt, fileTree: FileTreeContext<T>) => JSX.Element
+    fs: Pick<FileSystem<T>, 'readdir' | 'rename' | 'exists'>
     onDragOver?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLDivElement>): void
-    onSelection?(paths: string[]): void
     onRename?(oldPath: string, newPath: string): void
+    onSelection?(paths: string[]): void
     selection?: Array<string>
-    children: (dirEnt: DirEnt, fileTree: FileTreeContext<T>) => JSX.Element
+    sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
   }
+>
 
 export function FileTree<T>(props: FileTreeProps<T>) {
   const [config, rest] = splitProps(mergeProps({ base: '' }, props), ['fs', 'base'])
 
+  // Focused DirEnt
   const [focusedDirEnt, setFocusedDirEnt] = createSignal<string | undefined>()
+  const isDirEntFocused = createSelector(focusedDirEnt)
 
   function focusDirEnt(path: string) {
     setFocusedDirEnt(path)
   }
-
   function blurDirEnt(path: string) {
     if (focusedDirEnt() === path) {
       setFocusedDirEnt()
     }
   }
 
-  const isDirEntFocused = createSelector(focusedDirEnt)
-
-  // Selection DirEnts
+  // Selected DirEnts
   const [selectedDirEntRanges, setSelectedDirEntRanges] = createSignal<
     Array<[start: string, end?: string]>
   >([], { equals: false })
-
-  // Selection methods
-  function selectDirEnt(path: string) {
-    setSelectedDirEntRanges(dirEnts => [...dirEnts, [path]])
-  }
-
-  function deselectDirEnt(path: string) {
-    setSelectedDirEntRanges(
-      pairs =>
-        pairs
-          .map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== path))
-          .filter(pair => pair.length > 0) as [string, string?][],
-    )
-  }
-
-  function shiftSelectDirEnt(path: string) {
-    setSelectedDirEntRanges(dirEnts => {
-      if (dirEnts.length > 0) {
-        dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], path]
-        return [...dirEnts]
-      }
-      return [[path]]
-    })
-  }
-
-  function resetSelectedDirEnts() {
-    setSelectedDirEntRanges([])
-  }
-
   const selectedDirEnts = createMemo(() => {
     return selectedDirEntRanges()
       .flatMap(([start, end]) => {
@@ -183,10 +156,34 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       })
       .sort((a, b) => (a < b ? -1 : 1))
   })
-
   const isDirEntSelected = createSelector(selectedDirEnts, (path: string, dirs) =>
     dirs.includes(path),
   )
+
+  // Selection-methods
+  function selectDirEnt(path: string) {
+    setSelectedDirEntRanges(dirEnts => [...dirEnts, [path]])
+  }
+  function deselectDirEnt(path: string) {
+    setSelectedDirEntRanges(
+      pairs =>
+        pairs
+          .map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== path))
+          .filter(pair => pair.length > 0) as [string, string?][],
+    )
+  }
+  function shiftSelectDirEnt(path: string) {
+    setSelectedDirEntRanges(dirEnts => {
+      if (dirEnts.length > 0) {
+        dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], path]
+        return [...dirEnts]
+      }
+      return [[path]]
+    })
+  }
+  function resetSelectedDirEnts() {
+    setSelectedDirEntRanges([])
+  }
 
   // Call event handler with current selection
   createEffect(() => props.onSelection?.(selectedDirEnts()))
@@ -195,11 +192,9 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   createEffect(() => {
     batch(() => {
       if (!props.selection) return
-      resetSelectedDirEnts()
-      const ranges = props.selection
-        .filter(path => props.fs.exists(path))
-        .map(path => [path] as [string])
-      setSelectedDirEntRanges(ranges)
+      setSelectedDirEntRanges(
+        props.selection.filter(path => props.fs.exists(path)).map(path => [path] as [string]),
+      )
     })
   })
 
@@ -210,6 +205,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   const isDirExpanded = createSelector(expandedDirs, (path: string, expandedDirs) =>
     expandedDirs.includes(path),
   )
+
   function collapseDir(path: string) {
     setExpandedDirs(dirs => dirs.filter(dir => dir !== path))
   }
@@ -477,20 +473,20 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 }
 
 FileTree.DirEnt = function (
-  props: Omit<
+  props: Overwrite<
     ComponentProps<'button'>,
-    'onDragStart' | 'onDragOver' | 'onDrop' | 'onPointerDown' | 'onPointerUp' | 'onFocus' | 'onBlur'
-  > & {
-    ref?(element: HTMLButtonElement): void
-    onDragOver?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
-    onDragStart?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
-    onDrop?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
-    onMove?(parent: string): void
-    onPointerDown?(event: WrapEvent<PointerEvent, HTMLButtonElement>): void
-    onPointerUp?(event: WrapEvent<PointerEvent, HTMLButtonElement>): void
-    onFocus?(event: WrapEvent<FocusEvent, HTMLButtonElement>): void
-    onBlur?(event: WrapEvent<FocusEvent, HTMLButtonElement>): void
-  },
+    {
+      ref?(element: HTMLButtonElement): void
+      onDragOver?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
+      onDragStart?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
+      onDrop?(event: WrapEvent<DragEvent, HTMLButtonElement>): void
+      onMove?(parent: string): void
+      onPointerDown?(event: WrapEvent<PointerEvent, HTMLButtonElement>): void
+      onPointerUp?(event: WrapEvent<PointerEvent, HTMLButtonElement>): void
+      onFocus?(event: WrapEvent<FocusEvent, HTMLButtonElement>): void
+      onBlur?(event: WrapEvent<FocusEvent, HTMLButtonElement>): void
+    }
+  >,
 ) {
   const config = mergeProps({ draggable: true }, props)
   const fileTree = useFileTree()
@@ -576,7 +572,7 @@ FileTree.DirEnt = function (
 }
 
 FileTree.IndentGuides = function (props: {
-  guide: (type: Accessor<IndentGuideKind>) => JSX.Element
+  render: (type: Accessor<IndentGuideKind>) => JSX.Element
 }) {
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
@@ -591,7 +587,7 @@ FileTree.IndentGuides = function (props: {
     const dirEnts = fileTree.getDirEntsOfDir(parentPath)
     const index = dirEnts.findIndex(dirEnt => dirEnt.path === path)
 
-    return !dirEnts[index + 1]
+    return index === dirEnts.length - 1
   }
 
   function getAncestorAtLevel(index: number) {
@@ -619,7 +615,7 @@ FileTree.IndentGuides = function (props: {
         const kind = () => getGuideKind(index)
         return (
           <IndentGuideContext.Provider value={kind}>
-            {props.guide(kind)}
+            {props.render(kind)}
           </IndentGuideContext.Provider>
         )
       }}
@@ -668,9 +664,7 @@ FileTree.Name = function (props: {
       throw `Path ${newPath} already exists.`
     }
 
-    batch(() => {
-      dirEnt.rename(newPath)
-    })
+    dirEnt.rename(newPath)
   }
 
   return (
