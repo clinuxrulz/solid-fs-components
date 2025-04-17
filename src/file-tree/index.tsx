@@ -19,7 +19,6 @@ import {
   onMount,
   Show,
   splitProps,
-  untrack,
   useContext,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
@@ -27,7 +26,7 @@ import { CTRL_KEY, Overwrite, PathUtils, type WrapEvent } from 'src/utils'
 import { type FileSystem } from '../create-file-system'
 
 interface DirEntBase {
-  id: number,
+  id: number
   path: string
   indentation: number
   name: string
@@ -105,6 +104,100 @@ export function useIndentGuide() {
 
 /**********************************************************************************/
 /*                                                                                */
+/*                                createIdMiddleware                              */
+/*                                                                                */
+/**********************************************************************************/
+
+type IdNode = {
+  refCount: number
+  id: number
+}
+
+// ID Generation Middleware
+function createIdGenerator() {
+  let nextId = 0
+  const freeIds: number[] = []
+
+  function allocId() {
+    return freeIds.pop() ?? nextId++
+  }
+  function disposeId(id: number) {
+    freeIds.push(id)
+  }
+
+  let nodeMap = new Map<string, IdNode>()
+  let idToPathMap = new Map<number, string>()
+
+  return {
+    beforeRename(oldPath: string, newPath: string) {
+      let node = nodeMap.get(oldPath)
+      if (node == undefined) {
+        return
+      }
+      nodeMap.delete(oldPath)
+      nodeMap.set(newPath, node)
+      idToPathMap.set(node.id, newPath)
+    },
+    obtainId(path: string): number {
+      const node = nodeMap.get(path)
+      if (node) {
+        node.refCount++
+        onCleanup(() => {
+          queueMicrotask(() => {
+            node.refCount--
+            if (node.refCount == 0) {
+              disposeId(node.id)
+              nodeMap.delete(path)
+              idToPathMap.delete(node.id)
+            }
+          })
+        })
+        return node.id
+      } else {
+        const node = {
+          id: allocId(),
+          refCount: 1,
+        }
+        nodeMap.set(path, node)
+        idToPathMap.set(node.id, path)
+        onCleanup(() => {
+          queueMicrotask(() => {
+            node.refCount--
+            if (node.refCount == 0) {
+              disposeId(node.id)
+              nodeMap.delete(path)
+              idToPathMap.delete(node.id)
+            }
+          })
+        })
+        return node.id
+      }
+    },
+    freezeId(id: number) {
+      let path = idToPathMap.get(id)
+      if (path == undefined) {
+        return
+      }
+      let node = nodeMap.get(path)
+      if (node != undefined) {
+        node.refCount++
+        onCleanup(() => {
+          queueMicrotask(() => {
+            node.refCount--
+            if (node.refCount == 0) {
+              disposeId(node.id)
+              nodeMap.delete(path)
+              idToPathMap.delete(node.id)
+            }
+          })
+        })
+      }
+    },
+  }
+}
+
+/**********************************************************************************/
+/*                                                                                */
 /*                                    FileTree                                    */
 /*                                                                                */
 /**********************************************************************************/
@@ -126,6 +219,8 @@ export type FileTreeProps<T> = Overwrite<
 
 export function FileTree<T>(props: FileTreeProps<T>) {
   const [config, rest] = splitProps(mergeProps({ base: '' }, props), ['fs', 'base'])
+
+  const { obtainId, freezeId, beforeRename } = createIdGenerator()
 
   // Focused DirEnt
   const [focusedDirEnt, setFocusedDirEnt] = createSignal<string | undefined>()
@@ -225,96 +320,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     return dirEntsByDir[path]?.() || []
   }
 
-  // ID Generation Middleware
-  let beforeRename: (oldPath: string, newPath: string) => void;
-  let obtainId: (path: string) => number;
-  let freezeId: (id: number) => void;
-  {
-    let allocId: () => number;
-    let disposeId: (id: number) => void;
-    {
-      let nextId = 0;
-      let freeIds: number[] = [];
-      allocId = () => {
-        return freeIds.pop() ?? nextId++;
-      };
-      disposeId = (id: number) => {
-        freeIds.push(id);
-      };
-    }
-    type Node = {
-      id: number,
-      refCount: number,
-    };
-    let nodeMap = new Map<string, Node>();
-    let idToPathMap = new Map<number, string>();
-    beforeRename = (oldPath: string, newPath: string) => {
-      let node = nodeMap.get(oldPath);
-      if (node == undefined) {
-        return;
-      }
-      nodeMap.delete(oldPath);
-      nodeMap.set(newPath, node);
-      idToPathMap.set(node.id, newPath);
-    };
-    obtainId = (path: string): number => {
-      {
-        let node = nodeMap.get(path);
-        if (node != undefined) {
-          node.refCount++;
-          onCleanup(() => {
-            queueMicrotask(() => {
-              node.refCount--;
-              if (node.refCount == 0) {
-                disposeId(node.id);
-                nodeMap.delete(path);
-                idToPathMap.delete(node.id);
-              }
-            });
-          });
-          return node.id;
-        }
-      }
-      let node = {
-        id: allocId(),
-        refCount: 1,
-      };
-      nodeMap.set(path, node);
-      idToPathMap.set(node.id, path);
-      onCleanup(() => {
-        queueMicrotask(() => {
-          node.refCount--;
-          if (node.refCount == 0) {
-            disposeId(node.id);
-            nodeMap.delete(path);
-            idToPathMap.delete(node.id);
-          }
-        });
-      });
-      return node.id;
-    };
-    freezeId = (id: number) => {
-      let path = idToPathMap.get(id);
-      if (path == undefined) {
-        return;
-      }
-      let node = nodeMap.get(path);
-      if (node != undefined) {
-        node.refCount++;
-        onCleanup(() => {
-          queueMicrotask(() => {
-            node.refCount--;
-            if (node.refCount == 0) {
-              disposeId(node.id);
-              nodeMap.delete(path);
-              idToPathMap.delete(node.id);
-            }
-          });
-        });
-      }
-    };
-  }
-
   // Populate dirEntsByDir
   createEffect(
     mapArray(
@@ -322,21 +327,20 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       dirPath => {
         const unsortedDirEnts = createMemo<Array<Dir | File>>(
           keyArray(
-            () => props.fs.readdir(dirPath, { withFileTypes: true }).map(dirEnt => ({ id: obtainId(dirEnt.path), dirEnt, })),
+            () =>
+              props.fs.readdir(dirPath, { withFileTypes: true }).map(dirEnt => ({
+                id: obtainId(dirEnt.path),
+                ...dirEnt,
+              })),
             dirEnt => dirEnt.id,
-            dirEnt_ => {
-              const id = dirEnt_().id;
-              const dirEnt = () => dirEnt_().dirEnt;
-              const indentation = createMemo(() =>
-                getIndentationFromPath(dirEnt().path)
-              );
-              const name = createMemo(() =>
-                PathUtils.getName(dirEnt().path)!
-              );
+            dirEnt => {
+              const id = dirEnt().id
+              const indentation = createMemo(() => getIndentationFromPath(dirEnt().path))
+              const name = createMemo(() => PathUtils.getName(dirEnt().path)!)
               const base: DirEntBase = {
                 id,
                 get path() {
-                  return dirEnt().path;
+                  return dirEnt().path
                 },
                 get indentation() {
                   return indentation()
@@ -416,15 +420,14 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   )
 
   // Freeze ID numbers for selected entries
-  createComputed(on(
-    selectedDirEnts,
-    (selectedDirEnts2) => {
+  createComputed(
+    on(selectedDirEnts, selectedDirEnts2 => {
       for (let path in selectedDirEnts2) {
-        let id = obtainId(path);
-        freezeId(id);
+        let id = obtainId(path)
+        freezeId(id)
       }
-    },
-  ));
+    }),
+  )
 
   // DirEnts as a flat list
   const flatTree = createMemo(() => {
@@ -432,7 +435,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     const stack = [config.base]
     while (stack.length > 0) {
       const path = stack.shift()!
-      const dirEnts = getDirEntsOfDir(path);
+      const dirEnts = getDirEntsOfDir(path)
       stack.push(
         ...dirEnts
           .filter(dirEnt => dirEnt.type === 'dir' && isDirExpanded(dirEnt.path))
@@ -449,7 +452,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
   function renameDirEnt(oldPath: string, newPath: string) {
     batch(() => {
-      beforeRename(oldPath, newPath);
+      beforeRename(oldPath, newPath)
       props.fs.rename(oldPath, newPath)
       props.onRename?.(oldPath, newPath)
       setExpandedDirs(openedDirs => {
