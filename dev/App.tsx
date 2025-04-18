@@ -5,30 +5,38 @@ import { TmTextarea } from 'tm-textarea/solid'
 import { createFileSystem, DefaultIndentGuide, FileTree } from '../src'
 import styles from './App.module.css'
 
+const project = import.meta.glob('../**/*', { as: 'raw', eager: true })
+
+function transform(path: string, current: string): string {
+  const base = new URL(current + '/', 'file:///') // simulate a file URL
+  const projectRoot = new URL('../', base) // one level up from current
+  const resolved = new URL(path, base)
+  const rel = resolved.pathname.slice(projectRoot.pathname.length)
+  return decodeURIComponent(rel)
+}
+
 const App: Component = () => {
   const [selectedFile, setSelectedFile] = createSignal<string>('index0.ts')
 
   const fs = createFileSystem<string>()
 
-  function mockData(parts: Array<string>) {
-    if (parts.length > 5) return
-    fs.mkdir(parts.join('/'))
+  async function populate() {
+    for (const path of Object.keys(project)) {
+      const transformedPath = transform(path, 'dev')
+      const parts = transformedPath.split('/')
+      const dirs = parts.slice(0, -1)
 
-    for (let i = 0; i < Math.floor(Math.random() * 3); i++) {
-      const path = `${parts.join('/')}/index${i}.ts`
-      fs.writeFile(path, `export const value = 'Hello World from ${path}'`)
-    }
+      for (let i = 0; i <= dirs.length; i++) {
+        const path = dirs.slice(0, i).join('/')
+        if (!fs.exists(path)) {
+          fs.mkdir(path)
+        }
+      }
 
-    for (let i = 0; i < Math.floor(Math.random() * 3 + 1); i++) {
-      mockData([...parts, 'test' + i])
+      fs.writeFile(transformedPath, project[path]!)
     }
   }
-
-  mockData(['test'])
-  for (let i = 0; i < 3; i++) {
-    const path = `index${i}.ts`
-    fs.writeFile(path, `export const value = 'Hello World from ${path}'`)
-  }
+  populate()
 
   const grammar = () => {
     const _selected = selectedFile()
