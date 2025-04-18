@@ -4,17 +4,16 @@ import {
   type Accessor,
   batch,
   type ComponentProps,
+  createComputed,
   createContext,
   createEffect,
   createMemo,
-  createRenderEffect,
   createSelector,
   createSignal,
   Index,
   type JSX,
   mapArray,
   mergeProps,
-  on,
   onCleanup,
   onMount,
   Show,
@@ -63,21 +62,23 @@ type DirEnt = File | Dir
 interface FileTreeContext<T> {
   fs: Pick<FileSystem<T>, 'readdir' | 'rename' | 'exists'>
   base: string
-  getDirEntsOfDir(path: string): Array<DirEnt>
+  getDirEntsOfDirId(path: string): Array<DirEnt>
   // Expand/Collapse
-  expandDir(path: string): void
-  collapseDir(path: string): void
-  isDirExpanded(path: string): boolean
+  expandDirById(id: string): void
+  collapseDirById(id: string): void
+  isDirExpandedById(id: string): boolean
   // Selection
-  resetSelectedDirEnts(): void
-  moveSelectedDirEnts(path: string): void
-  selectDirEnt(path: string): void
-  shiftSelectDirEnt(path: string): void
-  deselectDirEnt(path: string): void
+  resetSelectedDirEntIds(): void
+  moveSelectedDirEntsToPath(path: string): void
+  selectDirEntById(id: string): void
+  shiftSelectDirEntById(id: string): void
+  deselectDirEntById(id: string): void
   // Focus
   focusDirEnt(path: string): void
   blurDirEnt(path: string): void
   isDirEntFocused(path: string): boolean
+  // Id Generator
+  pathToId(path: string): string
 }
 
 const FileTreeContext = createContext<FileTreeContext<any>>()
@@ -117,7 +118,7 @@ type IdNode = {
 // ID Generation Middleware
 function createIdGenerator() {
   const freeIds: Array<string> = []
-  const nodeMap = new Map<string, IdNode>()
+  const nodeMap = new ReactiveMap<string, IdNode>()
   const idToPathMap = new ReactiveMap<string, string>()
   let nextId = 0
 
@@ -187,10 +188,10 @@ function createIdGenerator() {
     },
     freezeId(id: string) {
       const path = untrack(() => idToPathMap.get(id))
+      const node = path ? nodeMap.get(path) : undefined
       if (path == undefined) {
         return
       }
-      const node = nodeMap.get(path)
       if (node !== undefined) {
         node.refCount++
         addCleanup(node, path)
@@ -200,11 +201,18 @@ function createIdGenerator() {
      * Reactively converts an ID back to a path
      */
     idToPath(id: string): string {
-      let path = idToPathMap.get(id)
+      const path = idToPathMap.get(id)
       if (path == undefined) {
-        throw new Error('id not found')
+        throw new Error(`path not found for id: ${id}`)
       }
       return path
+    },
+    pathToId(path: string): string {
+      let node = nodeMap.get(path)
+      if (node == undefined) {
+        throw new Error(`node not found for path: ${path}`)
+      }
+      return node.id
     },
   }
 }
@@ -233,7 +241,9 @@ export type FileTreeProps<T> = Overwrite<
 export function FileTree<T>(props: FileTreeProps<T>) {
   const [config, rest] = splitProps(mergeProps({ base: '' }, props), ['fs', 'base'])
 
-  const { obtainId, freezeId, beforeRename, idToPath } = createIdGenerator()
+  const { obtainId, freezeId, beforeRename, idToPath, pathToId } = createIdGenerator()
+
+  const baseId = createMemo(() => obtainId(config.base))
 
   // Focused DirEnt
   const [focusedDirEnt, setFocusedDirEnt] = createSignal<string | undefined>()
@@ -272,10 +282,10 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   )
 
   // Selection-methods
-  function selectDirEnt(id: string) {
+  function selectDirEntById(id: string) {
     setSelectedDirEntRanges(dirEnts => [...dirEnts, [id]])
   }
-  function deselectDirEnt(id: string) {
+  function deselectDirEntById(id: string) {
     setSelectedDirEntRanges(
       pairs =>
         pairs
@@ -283,7 +293,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           .filter(pair => pair.length > 0) as [string, string?][],
     )
   }
-  function shiftSelectDirEnt(id: string) {
+  function shiftSelectDirEntById(id: string) {
     setSelectedDirEntRanges(dirEnts => {
       if (dirEnts.length > 0) {
         dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], id]
@@ -292,7 +302,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       return [[id]]
     })
   }
-  function resetSelectedDirEnts() {
+  function resetSelectedDirEntIds() {
     setSelectedDirEntRanges([])
   }
 
@@ -309,48 +319,41 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     })
   })
 
-  // Freeze ID numbers for selected entries
-  createEffect(
-    on(selectedDirEntIds, ids => {
-      for (const id in ids) {
-        freezeId(id)
-      }
-    }),
-  )
-
   // Expand/Collapse Dirs
-  const [expandedDirs, setExpandedDirs] = createSignal<Array<string>>(new Array(), {
+  const [expandedDirIds, setExpandedDirIds] = createSignal<Array<string>>(new Array(), {
     equals: false,
   })
-  const isDirExpanded = createSelector(expandedDirs, (id: string, expandedDirs) =>
+  const isDirExpandedById = createSelector(expandedDirIds, (id: string, expandedDirs) =>
     expandedDirs.includes(id),
   )
 
-  function collapseDir(path: string) {
-    setExpandedDirs(dirs => dirs.filter(dir => dir !== path))
+  function collapseDirById(id: string) {
+    setExpandedDirIds(dirs => dirs.filter(dir => dir !== id))
   }
-  function expandDir(path: string) {
-    if (path !== config.base && !expandedDirs().includes(path)) {
-      setExpandedDirs(dirs => [...dirs, path])
+  function expandDirById(id: string) {
+    if (id !== baseId() && !expandedDirIds().includes(id)) {
+      setExpandedDirIds(ids => [...ids, id])
     }
   }
 
   // Record<Dir, Accessor<DirEnts>>
-  const [dirEntsByDir, setDirEntsByDir] = createStore<Record<string, Accessor<Array<DirEnt>>>>({})
+  const [dirEntsByDirId, setDirEntsByDirId] = createStore<Record<string, Accessor<Array<DirEnt>>>>(
+    {},
+  )
 
-  function getDirEntsOfDir(path: string) {
-    return dirEntsByDir[path]?.() || []
+  function getDirEntsOfDirId(id: string) {
+    return dirEntsByDirId[id]?.() || []
   }
 
   // Populate dirEntsByDir
   createEffect(
     mapArray(
-      () => [config.base, ...expandedDirs()],
-      dirPath => {
+      () => [baseId(), ...expandedDirIds()],
+      id => {
         const unsortedDirEnts = createMemo<Array<Dir | File>>(
           keyArray(
             () =>
-              props.fs.readdir(dirPath, { withFileTypes: true }).map(dirEnt => ({
+              props.fs.readdir(idToPath(id), { withFileTypes: true }).map(dirEnt => ({
                 id: obtainId(dirEnt.path),
                 type: dirEnt.type,
               })),
@@ -374,13 +377,13 @@ export function FileTree<T>(props: FileTreeProps<T>) {
                   return name()
                 },
                 select() {
-                  selectDirEnt(dirEnt().id)
+                  selectDirEntById(dirEnt().id)
                 },
                 deselect() {
-                  deselectDirEnt(dirEnt().id)
+                  deselectDirEntById(dirEnt().id)
                 },
                 shiftSelect() {
-                  shiftSelectDirEnt(dirEnt().id)
+                  shiftSelectDirEntById(dirEnt().id)
                 },
                 get selected() {
                   return isDirEntSelected(dirEnt().id)
@@ -400,15 +403,15 @@ export function FileTree<T>(props: FileTreeProps<T>) {
                 // Dir-specific API
                 get expand() {
                   if (dirEnt().type === 'file') return undefined
-                  return () => expandDir(idToPath(dirEnt().id))
+                  return () => expandDirById(dirEnt().id)
                 },
                 get collapse() {
                   if (dirEnt().type === 'file') return undefined
-                  return () => collapseDir(idToPath(dirEnt().id))
+                  return () => collapseDirById(dirEnt().id)
                 },
                 get expanded() {
                   if (dirEnt().type === 'file') return undefined
-                  return isDirExpanded(idToPath(dirEnt().id))
+                  return isDirExpandedById(dirEnt().id)
                 },
               } as DirEnt
             },
@@ -427,13 +430,13 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           ),
         )
 
-        setDirEntsByDir(dirPath, () => sortedDirEnts)
-        onCleanup(() => setDirEntsByDir(dirPath, undefined!))
+        setDirEntsByDirId(id, () => sortedDirEnts)
+        onCleanup(() => setDirEntsByDirId(id, undefined!))
 
         // Remove path from opened paths if it ceases to fs.exist
-        createRenderEffect(() => {
-          if (!props.fs.exists(dirPath)) {
-            setExpandedDirs(dirs => dirs.filter(dir => dir !== dirPath))
+        createComputed(() => {
+          if (!props.fs.exists(idToPath(id))) {
+            setExpandedDirIds(dirs => dirs.filter(dir => dir !== id))
           }
         })
       },
@@ -443,16 +446,14 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   // DirEnts as a flat list
   const flatTree = createMemo(() => {
     const list = new Array<DirEnt>()
-    const stack = [config.base]
-    while (stack.length > 0) {
-      const path = stack.shift()!
-      const dirEnts = getDirEntsOfDir(path)
-      stack.push(
-        ...dirEnts
-          .filter(dirEnt => dirEnt.type === 'dir' && isDirExpanded(dirEnt.path))
-          .map(dir => dir.path),
+    const idStack = [baseId()]
+    while (idStack.length > 0) {
+      const id = idStack.shift()!
+      const dirEnts = getDirEntsOfDirId(id)
+      idStack.push(
+        ...dirEnts.filter(dirEnt => dirEnt.type === 'dir' && dirEnt.expanded).map(dir => dir.id),
       )
-      list.splice(list.findIndex(dirEnt => dirEnt.path === path) + 1, 0, ...dirEnts)
+      list.splice(list.findIndex(dirEnt => dirEnt.id === id) + 1, 0, ...dirEnts)
     }
     return list
   })
@@ -466,39 +467,23 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       beforeRename(oldPath, newPath)
       props.fs.rename(oldPath, newPath)
       props.onRename?.(oldPath, newPath)
-      setExpandedDirs(openedDirs => {
-        return openedDirs.map(openedDir => {
-          if (openedDir === oldPath) {
-            return newPath
-          }
-          return PathUtils.rebase(openedDir, oldPath, newPath)
-        })
-      })
-      setSelectedDirEntRanges(ranges => {
-        return ranges.map(([start, end]) => {
-          start = PathUtils.rebase(start, oldPath, newPath)
-          if (end) {
-            return [start, PathUtils.rebase(end, oldPath, newPath)]
-          }
-          return [start]
-        })
-      })
       focusDirEnt(newPath)
     })
   }
 
-  function moveSelectedDirEnts(target: string) {
+  function moveSelectedDirEntsToPath(targetPath: string) {
+    const targetId = pathToId(targetPath)
     const ids = selectedDirEntIds()
     const paths = ids.map(idToPath)
     const existingPaths = new Array<{ newPath: string; oldPath: string }>()
 
     // Validate if any of the selected paths are ancestor of the target path
     for (const path of paths) {
-      if (path === target) {
+      if (path === targetPath) {
         throw `Cannot move ${path} into itself.`
       }
-      if (PathUtils.isAncestor(target, path)) {
-        throw `Cannot move because ${path} is ancestor of ${target}.`
+      if (PathUtils.isAncestor(targetPath, path)) {
+        throw `Cannot move because ${path} is ancestor of ${targetPath}.`
       }
     }
 
@@ -511,8 +496,8 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           ancestor
             ? // If the selection contains an ancestor of the current path
               // the path is renamed relative to the ancestor
-              [target, PathUtils.getName(ancestor), oldPath.replace(`${ancestor}/`, '')]
-            : [target, PathUtils.getName(oldPath)]
+              [targetPath, PathUtils.getName(ancestor), oldPath.replace(`${ancestor}/`, '')]
+            : [targetPath, PathUtils.getName(oldPath)]
         )
           .filter(Boolean)
           .join('/')
@@ -530,19 +515,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
     // Apply transforms
     batch(() => {
-      // Rename the opened dirs (before they are cleaned up)
-      setExpandedDirs(dirs =>
-        dirs.map(dir => {
-          const transform = transforms.find(({ oldPath }) => oldPath === dir)
-
-          if (transform) {
-            return transform.newPath
-          }
-
-          return dir
-        }),
-      )
-
       // Rename the dirEnt in the fileSystem
       transforms.forEach(({ oldPath, newPath, shouldRename }) => {
         if (!shouldRename) return
@@ -550,8 +522,8 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       })
 
       // Expand the target-dir (if it wasn't opened yet)
-      if (!isDirExpanded(target)) {
-        expandDir(target)
+      if (!isDirExpandedById(targetId)) {
+        expandDirById(targetId)
       }
     })
   }
@@ -563,19 +535,25 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     get base() {
       return config.base
     },
-    expandDir,
-    collapseDir,
-    isDirExpanded,
-    moveSelectedDirEnts,
-    resetSelectedDirEnts,
-    selectDirEnt,
-    deselectDirEnt,
-    shiftSelectDirEnt,
-    getDirEntsOfDir,
+    expandDirById,
+    collapseDirById,
+    isDirExpandedById,
+    moveSelectedDirEntsToPath,
+    resetSelectedDirEntIds,
+    selectDirEntById,
+    deselectDirEntById,
+    shiftSelectDirEntById,
+    getDirEntsOfDirId,
     focusDirEnt,
     blurDirEnt,
     isDirEntFocused,
+    pathToId,
   }
+
+  // Freeze ID numbers for selected entries
+  createComputed(() => selectedDirEntIds().forEach(freezeId))
+  // Freeze ID numbers for expanded dirs
+  createComputed(() => expandedDirIds().forEach(freezeId))
 
   return (
     <div
@@ -585,7 +563,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
         props.onDragOver?.(event)
       }}
       onDrop={event => {
-        moveSelectedDirEnts(config.base)
+        moveSelectedDirEntsToPath(config.base)
         props.onDrop?.(event)
       }}
     >
@@ -630,7 +608,7 @@ FileTree.DirEnt = function (
         } else {
           if (!dirEnt().selected) {
             if (!event[CTRL_KEY]) {
-              fileTree.resetSelectedDirEnts()
+              fileTree.resetSelectedDirEntIds()
             }
             dirEnt().select()
           } else if (event[CTRL_KEY]) {
@@ -661,10 +639,9 @@ FileTree.DirEnt = function (
       const _dirEnt = dirEnt()
 
       if (_dirEnt.type === 'dir') {
-        fileTree.moveSelectedDirEnts(_dirEnt.path)
+        fileTree.moveSelectedDirEntsToPath(_dirEnt.path)
       } else {
-        const parent = _dirEnt.path.split('/').slice(0, -1).join('/')
-        fileTree.moveSelectedDirEnts(parent)
+        fileTree.moveSelectedDirEntsToPath(PathUtils.getParent(_dirEnt.path))
       }
 
       props.onDrop?.(event)
@@ -715,7 +692,7 @@ FileTree.IndentGuides = function (props: {
       return false
     }
 
-    const dirEnts = fileTree.getDirEntsOfDir(parentPath)
+    const dirEnts = fileTree.getDirEntsOfDirId(fileTree.pathToId(parentPath))
     const index = dirEnts.findIndex(dirEnt => dirEnt.path === path)
 
     return index === dirEnts.length - 1
@@ -740,11 +717,8 @@ FileTree.IndentGuides = function (props: {
       : 'pipe'
   }
 
-  const guideKinds = () =>
-    Array.from({ length: dirEnt().indentation }, (_, index) => getGuideKind(index))
-
   return (
-    <Index each={guideKinds()}>
+    <Index each={Array.from({ length: dirEnt().indentation }, (_, index) => getGuideKind(index))}>
       {kind => (
         <IndentGuideContext.Provider value={kind}>{props.render(kind)}</IndentGuideContext.Provider>
       )}
@@ -760,11 +734,10 @@ FileTree.Expanded = function (
 ) {
   const [, rest] = splitProps(props, ['expanded', 'collapsed'])
   const dirEnt = useDirEnt()
-  const fileTree = useFileTree()
   return (
     <Show when={dirEnt().type === 'dir'}>
       <span {...rest}>
-        <Show when={fileTree.isDirExpanded(dirEnt().path)} fallback={props.expanded}>
+        <Show when={(dirEnt() as Dir).expanded} fallback={props.expanded}>
           {props.collapsed}
         </Show>
       </span>
