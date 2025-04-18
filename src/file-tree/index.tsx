@@ -24,9 +24,10 @@ import {
 import { createStore } from 'solid-js/store'
 import { CTRL_KEY, Overwrite, PathUtils, type WrapEvent } from 'src/utils'
 import { type FileSystem } from '../create-file-system'
+import { ReactiveMap } from '@solid-primitives/map'
 
 interface DirEntBase {
-  id: number
+  id: string
   path: string
   indentation: number
   name: string
@@ -110,14 +111,14 @@ export function useIndentGuide() {
 
 type IdNode = {
   refCount: number
-  id: number
+  id: string
 }
 
 // ID Generation Middleware
 function createIdGenerator() {
-  const freeIds: Array<number> = []
+  const freeIds: Array<string> = []
   const nodeMap = new Map<string, IdNode>()
-  const idToPathMap = new Map<number, string>()
+  const idToPathMap = new ReactiveMap<string, string>()
   let nextId = 0
 
   function createIdNode(path: string) {
@@ -130,9 +131,9 @@ function createIdGenerator() {
     return node
   }
   function allocId() {
-    return freeIds.pop() ?? nextId++
+    return freeIds.pop() ?? (nextId++).toString()
   }
-  function disposeId(id: number) {
+  function disposeId(id: string) {
     freeIds.push(id)
   }
   function addCleanup(node: IdNode, path: string) {
@@ -174,7 +175,7 @@ function createIdGenerator() {
         idToPathMap.set(node.id, newPath2)
       }
     },
-    obtainId(path: string): number {
+    obtainId(path: string): string {
       let node = nodeMap.get(path)
       if (node) {
         node.refCount++
@@ -184,8 +185,8 @@ function createIdGenerator() {
       addCleanup(node, path)
       return node.id
     },
-    freezeId(id: number) {
-      const path = idToPathMap.get(id)
+    freezeId(id: string) {
+      const path = untrack(() => idToPathMap.get(id))
       if (path == undefined) {
         return
       }
@@ -195,6 +196,16 @@ function createIdGenerator() {
         addCleanup(node, path)
       }
     },
+    /**
+     * Reactively converts an ID back to a path
+     */
+    idToPath(id: string): string {
+      let path = idToPathMap.get(id);
+      if (path == undefined) {
+        throw new Error("id not found");
+      }
+      return path;
+    }
   }
 }
 
@@ -222,7 +233,7 @@ export type FileTreeProps<T> = Overwrite<
 export function FileTree<T>(props: FileTreeProps<T>) {
   const [config, rest] = splitProps(mergeProps({ base: '' }, props), ['fs', 'base'])
 
-  const { obtainId, freezeId, beforeRename } = createIdGenerator()
+  const { obtainId, freezeId, beforeRename, idToPath } = createIdGenerator()
 
   // Focused DirEnt
   const [focusedDirEnt, setFocusedDirEnt] = createSignal<string | undefined>()

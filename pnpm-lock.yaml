@@ -11,6 +11,9 @@ importers:
       '@solid-primitives/keyed':
         specifier: ^1.5.0
         version: 1.5.0(solid-js@1.8.17)
+      '@solid-primitives/map':
+        specifier: ^0.6.0
+        version: 0.6.0(solid-js@1.8.17)
       '@solid-primitives/range':
         specifier: ^0.2.0
         version: 0.2.0(solid-js@1.8.17)
@@ -820,6 +823,11 @@ packages:
     peerDependencies:
       solid-js: ^1.6.12
 
+  '@solid-primitives/map@0.6.0':
+    resolution: {integrity: sha512-h8uCJNxUTvzNK/aTW9vJCd/PQeBkUL8i7AyLPvTFqMgcMnJ1I5GzAi5JODzxpxQwffxoqJyQtOE1vBqFzDv0Vw==}
+    peerDependencies:
+      solid-js: ^1.6.12
+
   '@solid-primitives/memo@1.4.1':
     resolution: {integrity: sha512-MzNCJNpXidQdLOZUsEkwpuq52uwT8zrFrBxEVMEr9N35yIIvGhjqwrI1M6xzPmJGzuVUe8anCk57q+N5gyRk0Q==}
     peerDependencies:
@@ -832,6 +840,11 @@ packages:
 
   '@solid-primitives/scheduled@1.5.0':
     resolution: {integrity: sha512-RVw24IRNh1FQ4DCMb3OahB70tXIwc5vH8nhR4nNPsXwUPQeuOkLsDI5BlxaPk0vyZgqw9lDpufgI3HnPwplgDw==}
+    peerDependencies:
+      solid-js: ^1.6.12
+
+  '@solid-primitives/trigger@1.2.0':
+    resolution: {integrity: sha512-sW4/3cDXSjYQampn8CIFZ11BlxgNf2li8r2fXnb3b3YWE6RdZZCl8PhvpPF38Gzl0CnryrbTPJWM7OIkseCDgQ==}
     peerDependencies:
       solid-js: ^1.6.12
 
@@ -3006,6 +3019,11 @@ snapshots:
     dependencies:
       solid-js: 1.8.17
 
+  '@solid-primitives/map@0.6.0(solid-js@1.8.17)':
+    dependencies:
+      '@solid-primitives/trigger': 1.2.0(solid-js@1.8.17)
+      solid-js: 1.8.17
+
   '@solid-primitives/memo@1.4.1(solid-js@1.8.17)':
     dependencies:
       '@solid-primitives/scheduled': 1.5.0(solid-js@1.8.17)
@@ -3019,6 +3037,11 @@ snapshots:
 
   '@solid-primitives/scheduled@1.5.0(solid-js@1.8.17)':
     dependencies:
+      solid-js: 1.8.17
+
+  '@solid-primitives/trigger@1.2.0(solid-js@1.8.17)':
+    dependencies:
+      '@solid-primitives/utils': 6.3.0(solid-js@1.8.17)
       solid-js: 1.8.17
 
   '@solid-primitives/utils@6.3.0(solid-js@1.8.17)':
