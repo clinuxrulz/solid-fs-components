@@ -252,44 +252,44 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   const [selectedDirEntRanges, setSelectedDirEntRanges] = createSignal<
     Array<[start: string, end?: string]>
   >([], { equals: false })
-  const selectedDirEnts = createMemo(() => {
+  const selectedDirEntIds = createMemo(() => {
     return selectedDirEntRanges()
       .flatMap(([start, end]) => {
         if (end) {
-          const startIndex = flatTree().findIndex(dir => dir.path === start)
-          const endIndex = flatTree().findIndex(dir => dir.path === end)
+          const startIndex = flatTree().findIndex(dir => dir.id === start)
+          const endIndex = flatTree().findIndex(dir => dir.id === end)
 
           return flatTree()
             .slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1)
-            .map(dirEnt => dirEnt.path)
+            .map(dirEnt => dirEnt.id)
         }
         return start
       })
       .sort((a, b) => (a < b ? -1 : 1))
   })
-  const isDirEntSelected = createSelector(selectedDirEnts, (path: string, dirs) =>
-    dirs.includes(path),
+  const isDirEntSelected = createSelector(selectedDirEntIds, (id: string, dirs) =>
+    dirs.includes(id),
   )
 
   // Selection-methods
-  function selectDirEnt(path: string) {
-    setSelectedDirEntRanges(dirEnts => [...dirEnts, [path]])
+  function selectDirEnt(id: string) {
+    setSelectedDirEntRanges(dirEnts => [...dirEnts, [id]])
   }
-  function deselectDirEnt(path: string) {
+  function deselectDirEnt(id: string) {
     setSelectedDirEntRanges(
       pairs =>
         pairs
-          .map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== path))
+          .map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== id))
           .filter(pair => pair.length > 0) as [string, string?][],
     )
   }
-  function shiftSelectDirEnt(path: string) {
+  function shiftSelectDirEnt(id: string) {
     setSelectedDirEntRanges(dirEnts => {
       if (dirEnts.length > 0) {
-        dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], path]
+        dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], id]
         return [...dirEnts]
       }
-      return [[path]]
+      return [[id]]
     })
   }
   function resetSelectedDirEnts() {
@@ -297,23 +297,22 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Call event handler with current selection
-  createEffect(() => props.onSelection?.(selectedDirEnts()))
+  createEffect(() => props.onSelection?.(selectedDirEntIds()))
 
   // Update selection from props
   createEffect(() => {
     batch(() => {
       if (!props.selection) return
       setSelectedDirEntRanges(
-        props.selection.filter(path => props.fs.exists(path)).map(path => [path] as [string]),
+        props.selection.filter(id => props.fs.exists(idToPath(id))).map(id => [id] as [string]),
       )
     })
   })
 
   // Freeze ID numbers for selected entries
   createEffect(
-    on(selectedDirEnts, selectedDirEnts => {
-      for (let path in selectedDirEnts) {
-        let id = obtainId(path)
+    on(selectedDirEntIds, ids => {
+      for (const id in ids) {
         freezeId(id)
       }
     }),
@@ -323,8 +322,8 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   const [expandedDirs, setExpandedDirs] = createSignal<Array<string>>(new Array(), {
     equals: false,
   })
-  const isDirExpanded = createSelector(expandedDirs, (path: string, expandedDirs) =>
-    expandedDirs.includes(path),
+  const isDirExpanded = createSelector(expandedDirs, (id: string, expandedDirs) =>
+    expandedDirs.includes(id),
   )
 
   function collapseDir(path: string) {
@@ -353,12 +352,13 @@ export function FileTree<T>(props: FileTreeProps<T>) {
             () =>
               props.fs.readdir(dirPath, { withFileTypes: true }).map(dirEnt => ({
                 id: obtainId(dirEnt.path),
-                ...dirEnt,
+                type: dirEnt.type,
               })),
             dirEnt => dirEnt.id,
             dirEnt => {
-              const indentation = createMemo(() => getIndentationFromPath(dirEnt().path))
-              const name = createMemo(() => PathUtils.getName(dirEnt().path)!)
+              const indentation = createMemo(() => getIndentationFromPath(idToPath(dirEnt().id)))
+              const name = createMemo(() => PathUtils.getName(idToPath(dirEnt().id))!)
+
               return {
                 id: dirEnt().id,
                 get type() {
@@ -374,41 +374,41 @@ export function FileTree<T>(props: FileTreeProps<T>) {
                   return name()
                 },
                 select() {
-                  selectDirEnt(dirEnt().path)
+                  selectDirEnt(dirEnt().id)
                 },
                 deselect() {
-                  deselectDirEnt(dirEnt().path)
+                  deselectDirEnt(dirEnt().id)
                 },
                 shiftSelect() {
-                  shiftSelectDirEnt(dirEnt().path)
+                  shiftSelectDirEnt(dirEnt().id)
                 },
                 get selected() {
-                  return isDirEntSelected(dirEnt().path)
+                  return isDirEntSelected(dirEnt().id)
                 },
                 rename(newPath: string) {
-                  renameDirEnt(dirEnt().path, newPath)
+                  renameDirEnt(idToPath(dirEnt().id), newPath)
                 },
                 focus() {
-                  focusDirEnt(dirEnt().path)
+                  focusDirEnt(idToPath(dirEnt().id))
                 },
                 blur() {
-                  blurDirEnt(dirEnt().path)
+                  blurDirEnt(idToPath(dirEnt().id))
                 },
                 get focused() {
-                  return isDirEntFocused(dirEnt().path)
+                  return isDirEntFocused(idToPath(dirEnt().id))
                 },
                 // Dir-specific API
                 get expand() {
                   if (dirEnt().type === 'file') return undefined
-                  return () => expandDir(dirEnt().path)
+                  return () => expandDir(idToPath(dirEnt().id))
                 },
                 get collapse() {
                   if (dirEnt().type === 'file') return undefined
-                  return () => collapseDir(dirEnt().path)
+                  return () => collapseDir(idToPath(dirEnt().id))
                 },
                 get expanded() {
                   if (dirEnt().type === 'file') return undefined
-                  return isDirExpanded(dirEnt().path)
+                  return isDirExpanded(idToPath(dirEnt().id))
                 },
               } as DirEnt
             },
@@ -488,21 +488,21 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   function moveSelectedDirEnts(target: string) {
-    const selection = selectedDirEnts()
+    const ids = selectedDirEntIds()
+    const paths = ids.map(idToPath)
+    const existingPaths = new Array<{ newPath: string; oldPath: string }>()
 
     // Validate if any of the selected paths are ancestor of the target path
-    for (const selected of selection) {
-      if (selected === target) {
-        throw `Cannot move ${selected} into itself.`
+    for (const path of paths) {
+      if (path === target) {
+        throw `Cannot move ${path} into itself.`
       }
-      if (PathUtils.isAncestor(target, selected)) {
-        throw `Cannot move because ${selected} is ancestor of ${target}.`
+      if (PathUtils.isAncestor(target, path)) {
+        throw `Cannot move because ${path} is ancestor of ${target}.`
       }
     }
 
-    const existingPaths = new Array<{ newPath: string; oldPath: string }>()
-
-    const transforms = selection
+    const transforms = paths
       .sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : 1))
       .map((oldPath, index, arr) => {
         const ancestor = arr.slice(0, index).find(path => PathUtils.isAncestor(oldPath, path))
@@ -542,9 +542,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           return dir
         }),
       )
-
-      // Rename the dirEnts in the selection (before they are cleaned up)
-      setSelectedDirEntRanges(() => transforms.map(({ newPath }) => [newPath]))
 
       // Rename the dirEnt in the fileSystem
       transforms.forEach(({ oldPath, newPath, shouldRename }) => {
