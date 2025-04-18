@@ -19,6 +19,7 @@ import {
   Show,
   splitProps,
   useContext,
+  untrack,
 } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { CTRL_KEY, Overwrite, PathUtils, type WrapEvent } from 'src/utils'
@@ -149,13 +150,29 @@ function createIdGenerator() {
 
   return {
     beforeRename(oldPath: string, newPath: string) {
-      const node = nodeMap.get(oldPath)
-      if (node === undefined) {
-        return
+      let renamesToDo: { oldPath: string, newPath: string, }[] = [];
+      for (let path of nodeMap.keys()) {
+        if (
+          path.length > oldPath.length &&
+          path.slice(0, oldPath.length) == oldPath &&
+          path[oldPath.length] == "/"
+        ) {
+          let postfix = path.slice(oldPath.length);
+          let oldPath2 = oldPath + postfix;
+          let newPath2 = newPath + postfix;
+          renamesToDo.push({ oldPath: oldPath2, newPath: newPath2, });
+        }
       }
-      nodeMap.delete(oldPath)
-      nodeMap.set(newPath, node)
-      idToPathMap.set(node.id, newPath)
+      renamesToDo.push({ oldPath, newPath, });
+      for (let { oldPath: oldPath2, newPath: newPath2 } of renamesToDo) {
+        const node = nodeMap.get(oldPath2)
+        if (node === undefined) {
+          return
+        }
+        nodeMap.delete(oldPath2)
+        nodeMap.set(newPath2, node)
+        idToPathMap.set(node.id, newPath2)
+      }
     },
     obtainId(path: string): number {
       let node = nodeMap.get(path)
@@ -325,11 +342,12 @@ export function FileTree<T>(props: FileTreeProps<T>) {
             () =>
               props.fs.readdir(dirPath, { withFileTypes: true }).map(dirEnt => ({
                 id: obtainId(dirEnt.path),
-                ...dirEnt,
+                dirEnt,
               })),
             dirEnt => dirEnt.id,
-            dirEnt => {
-              const id = dirEnt().id
+            dirEnt_ => {
+              const id = dirEnt_().id
+              const dirEnt = () => dirEnt_().dirEnt;
               const indentation = createMemo(() => getIndentationFromPath(dirEnt().path))
               const name = createMemo(() => PathUtils.getName(dirEnt().path)!)
               const base: DirEntBase = {
@@ -571,7 +589,10 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           {dirEnt => {
             return (
               <DirEntContext.Provider value={dirEnt}>
-                {props.children(dirEnt(), fileTreeContext)}
+                {(() => {
+                  let dirEnt2 = dirEnt();
+                  return untrack(() => props.children(dirEnt2, fileTreeContext));
+                })()}
               </DirEntContext.Provider>
             )
           }}
