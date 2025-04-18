@@ -63,8 +63,8 @@ const App: Component = () => {
             const [editable, setEditable] = createSignal(false)
 
             onMount(() => {
-              if (dirEnt.focused && dirEnt.type === 'file') {
-                setSelectedFile(dirEnt.path)
+              if (dirEnt().focused && dirEnt().type === 'file') {
+                setSelectedFile(dirEnt().path)
               }
             })
 
@@ -72,28 +72,29 @@ const App: Component = () => {
               <FileTree.DirEnt
                 class={styles.dirEnt}
                 style={{
-                  background: dirEnt.selected ? '#484f6c' : undefined,
+                  background: dirEnt().selected ? '#484f6c' : undefined,
                 }}
                 onDblClick={() => setEditable(true)}
                 onMouseDown={() => {
-                  if (dirEnt.type === 'file') {
-                    setSelectedFile(dirEnt.path)
+                  if (dirEnt().type === 'file') {
+                    setSelectedFile(dirEnt().path)
                   }
                 }}
                 onKeyDown={e => {
+                  const _dirEnt = dirEnt()
                   switch (e.code) {
                     case 'Enter':
                       setEditable(editable => !editable)
                       break
                     case 'Space':
-                      if (dirEnt.type === 'dir') {
-                        if (dirEnt.expanded) {
-                          dirEnt.collapse()
+                      if (_dirEnt.type === 'dir') {
+                        if (_dirEnt.expanded) {
+                          _dirEnt.collapse()
                         } else {
-                          dirEnt.expand()
+                          _dirEnt.expand()
                         }
                       } else {
-                        setSelectedFile(dirEnt.path)
+                        setSelectedFile(_dirEnt.path)
                       }
                       break
                   }
@@ -109,7 +110,7 @@ const App: Component = () => {
                 />
                 <FileTree.Name
                   editable={editable()}
-                  style={{ 'margin-left': dirEnt.type === 'file' ? '7.5px' : undefined }}
+                  style={{ 'margin-left': dirEnt().type === 'file' ? '7.5px' : undefined }}
                   onBlur={() => setEditable(false)}
                 />
               </FileTree.DirEnt>

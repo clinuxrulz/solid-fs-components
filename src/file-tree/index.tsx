@@ -1,6 +1,5 @@
 import { Key, keyArray } from '@solid-primitives/keyed'
 import { ReactiveMap } from '@solid-primitives/map'
-import { Repeat } from '@solid-primitives/range'
 import {
   type Accessor,
   batch,
@@ -11,6 +10,7 @@ import {
   createRenderEffect,
   createSelector,
   createSignal,
+  Index,
   type JSX,
   mapArray,
   mergeProps,
@@ -91,7 +91,7 @@ const DirEntContext = createContext<Accessor<DirEnt>>()
 export function useDirEnt() {
   const context = useContext(DirEntContext)
   if (!context) throw `DirEntContext is undefined`
-  return context()
+  return context
 }
 
 type IndentGuideKind = 'pipe' | 'tee' | 'elbow' | 'spacer'
@@ -219,7 +219,7 @@ export type FileTreeProps<T> = Overwrite<
   ComponentProps<'div'>,
   {
     base?: string
-    children: (dirEnt: DirEnt, fileTree: FileTreeContext<T>) => JSX.Element
+    children: (dirEnt: Accessor<DirEnt>, fileTree: FileTreeContext<T>) => JSX.Element
     fs: Pick<FileSystem<T>, 'readdir' | 'rename' | 'exists'>
     onDragOver?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLDivElement>): void
@@ -594,16 +594,11 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     >
       <FileTreeContext.Provider value={fileTreeContext}>
         <Key each={flatTree()} by={item => item.id}>
-          {dirEnt => {
-            return (
-              <DirEntContext.Provider value={dirEnt}>
-                {(() => {
-                  let dirEnt2 = dirEnt();
-                  return untrack(() => props.children(dirEnt2, fileTreeContext));
-                })()}
-              </DirEntContext.Provider>
-            )
-          }}
+          {dirEnt => (
+            <DirEntContext.Provider value={dirEnt}>
+              {untrack(() => props.children(dirEnt, fileTreeContext))}
+            </DirEntContext.Provider>
+          )}
         </Key>
       </FileTreeContext.Provider>
     </div>
@@ -632,29 +627,29 @@ FileTree.DirEnt = function (
 
   const handlers = {
     onPointerDown(event: WrapEvent<PointerEvent, HTMLButtonElement>) {
-      if (event.shiftKey) {
-        dirEnt.shiftSelect()
-      } else {
-        const selected = dirEnt.selected
-        if (!selected) {
-          batch(() => {
+      batch(() => {
+        if (event.shiftKey) {
+          dirEnt().shiftSelect()
+        } else {
+          if (!dirEnt().selected) {
             if (!event[CTRL_KEY]) {
               fileTree.resetSelectedDirEnts()
             }
-            dirEnt.select()
-          })
-        } else if (event[CTRL_KEY]) {
-          dirEnt.deselect()
+            dirEnt().select()
+          } else if (event[CTRL_KEY]) {
+            dirEnt().deselect()
+          }
         }
-      }
+      })
       props.onPointerDown?.(event)
     },
     onPointerUp(event: WrapEvent<PointerEvent, HTMLButtonElement>) {
-      if (dirEnt.type === 'dir') {
-        if (dirEnt.expanded) {
-          dirEnt.collapse()
+      const _dirEnt = dirEnt()
+      if (_dirEnt.type === 'dir') {
+        if (_dirEnt.expanded) {
+          _dirEnt.collapse()
         } else {
-          dirEnt.expand()
+          _dirEnt.expand()
         }
       }
       props.onPointerUp?.(event)
@@ -666,27 +661,28 @@ FileTree.DirEnt = function (
     onDrop: (event: WrapEvent<DragEvent, HTMLButtonElement>) => {
       event.preventDefault()
       event.stopPropagation()
+      const _dirEnt = dirEnt()
 
-      if (dirEnt.type === 'dir') {
-        fileTree.moveSelectedDirEnts(dirEnt.path)
+      if (_dirEnt.type === 'dir') {
+        fileTree.moveSelectedDirEnts(_dirEnt.path)
       } else {
-        const parent = dirEnt.path.split('/').slice(0, -1).join('/')
+        const parent = _dirEnt.path.split('/').slice(0, -1).join('/')
         fileTree.moveSelectedDirEnts(parent)
       }
 
       props.onDrop?.(event)
     },
     onFocus(event: WrapEvent<FocusEvent, HTMLButtonElement>) {
-      dirEnt.focus()
+      dirEnt().focus()
       props.onFocus?.(event)
     },
     onBlur(event: WrapEvent<FocusEvent, HTMLButtonElement>) {
-      dirEnt.blur()
+      dirEnt().blur()
       props.onBlur?.(event)
     },
     ref(element: HTMLButtonElement) {
       onMount(() => {
-        if (dirEnt.focused) {
+        if (dirEnt().focused) {
           element.focus()
         }
       })
@@ -696,10 +692,10 @@ FileTree.DirEnt = function (
 
   return (
     <Show
-      when={dirEnt.type === 'dir'}
+      when={dirEnt().type === 'dir'}
       fallback={<button {...config} {...handlers} />}
       children={_ => (
-        <Show when={dirEnt.path}>
+        <Show when={dirEnt().path}>
           <button {...config} {...handlers}>
             {props.children}
           </button>
@@ -729,16 +725,16 @@ FileTree.IndentGuides = function (props: {
   }
 
   function getAncestorAtLevel(index: number) {
-    return dirEnt.path
-      .split('/')
+    return dirEnt()
+      .path.split('/')
       .slice(0, index + 2)
       .join('/')
   }
 
   function getGuideKind(index: number) {
-    const isLastGuide = dirEnt.indentation - index === 1
+    const isLastGuide = dirEnt().indentation - index === 1
 
-    return isLastGuide && isLastChild(dirEnt.path)
+    return isLastGuide && isLastChild(dirEnt().path)
       ? 'elbow'
       : isLastChild(getAncestorAtLevel(index))
       ? 'spacer'
@@ -747,17 +743,15 @@ FileTree.IndentGuides = function (props: {
       : 'pipe'
   }
 
+  const guideKinds = () =>
+    Array.from({ length: dirEnt().indentation }, (_, index) => getGuideKind(index))
+
   return (
-    <Repeat times={dirEnt.indentation}>
-      {index => {
-        const kind = () => getGuideKind(index)
-        return (
-          <IndentGuideContext.Provider value={kind}>
-            {props.render(kind)}
-          </IndentGuideContext.Provider>
-        )
-      }}
-    </Repeat>
+    <Index each={guideKinds()}>
+      {kind => (
+        <IndentGuideContext.Provider value={kind}>{props.render(kind)}</IndentGuideContext.Provider>
+      )}
+    </Index>
   )
 }
 
@@ -771,9 +765,9 @@ FileTree.Expanded = function (
   const dirEnt = useDirEnt()
   const fileTree = useFileTree()
   return (
-    <Show when={dirEnt.type === 'dir'}>
+    <Show when={dirEnt().type === 'dir'}>
       <span {...rest}>
-        <Show when={fileTree.isDirExpanded(dirEnt.path)} fallback={props.expanded}>
+        <Show when={fileTree.isDirExpanded(dirEnt().path)} fallback={props.expanded}>
           {props.collapsed}
         </Show>
       </span>
@@ -791,18 +785,18 @@ FileTree.Name = function (props: {
   const fileTree = useFileTree()
 
   function rename(element: HTMLInputElement) {
-    const newPath = [...dirEnt.path.split('/').slice(0, -1), element.value].join('/')
+    const newPath = [...dirEnt().path.split('/').slice(0, -1), element.value].join('/')
 
-    if (newPath === dirEnt.path) {
+    if (newPath === dirEnt().path) {
       return
     }
 
     if (fileTree.fs.exists(newPath)) {
-      element.value = dirEnt.name
+      element.value = dirEnt().name
       throw `Path ${newPath} already exists.`
     }
 
-    dirEnt.rename(newPath)
+    dirEnt().rename(newPath)
   }
 
   return (
@@ -810,7 +804,7 @@ FileTree.Name = function (props: {
       when={props.editable}
       fallback={
         <span class={props.class} style={props.style}>
-          {dirEnt.name} [ID = {dirEnt.id}]
+          {dirEnt().name} [ID = {dirEnt().id}]
         </span>
       }
     >
@@ -826,7 +820,7 @@ FileTree.Name = function (props: {
         }}
         class={props.class}
         style={{ all: 'unset', ...props.style }}
-        value={dirEnt.name}
+        value={dirEnt().name}
         spellcheck={false}
         onKeyDown={event => {
           if (event.code === 'Enter') {
@@ -834,7 +828,7 @@ FileTree.Name = function (props: {
           }
         }}
         onBlur={event => {
-          if (fileTree.fs.exists(dirEnt.path)) {
+          if (fileTree.fs.exists(dirEnt().path)) {
             rename(event.currentTarget)
           }
           props.onBlur?.(event)
