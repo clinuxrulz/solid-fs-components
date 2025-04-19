@@ -118,7 +118,7 @@ type IdNode = {
 // ID Generation Middleware
 function createIdGenerator() {
   const freeIds: Array<string> = []
-  const nodeMap = new ReactiveMap<string, IdNode>()
+  const nodeMap = new Map<string, IdNode>()
   const idToPathMap = new ReactiveMap<string, string>()
   let nextId = 0
 
