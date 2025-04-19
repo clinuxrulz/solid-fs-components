@@ -106,7 +106,7 @@ export function useIndentGuide() {
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                createIdMiddleware                              */
+/*                                createIdGenerator                               */
 /*                                                                                */
 /**********************************************************************************/
 
@@ -118,18 +118,26 @@ type IdNode = {
 // ID Generation Middleware
 function createIdGenerator() {
   const freeIds: Array<string> = []
-  const nodeMap = new ReactiveMap<string, IdNode>()
+  const pathToNodeMap = new Map<string, IdNode>()
   const idToPathMap = new ReactiveMap<string, string>()
   let nextId = 0
 
-  function createIdNode(path: string) {
+  function createIdNode(path: string, refCount = 1) {
     const node = {
       id: allocId(),
-      refCount: 1,
+      refCount,
     }
-    nodeMap.set(path, node)
+    pathToNodeMap.set(path, node)
     idToPathMap.set(node.id, path)
     return node
+  }
+  function renameIdNode({ oldPath, newPath }: { oldPath: string; newPath: string }) {
+    const node = pathToNodeMap.get(oldPath)
+    if (node) {
+      pathToNodeMap.delete(oldPath)
+      pathToNodeMap.set(newPath, node)
+      idToPathMap.set(node.id, newPath)
+    }
   }
   function allocId() {
     return freeIds.pop() ?? (nextId++).toString()
@@ -137,80 +145,98 @@ function createIdGenerator() {
   function disposeId(id: string) {
     freeIds.push(id)
   }
-  function addCleanup(node: IdNode, path: string) {
+  function addCleanup(node: IdNode) {
     onCleanup(() => {
-      queueMicrotask(() => {
-        node.refCount--
-        if (node.refCount === 0) {
+      node.refCount--
+      if (node.refCount <= 0) {
+        // queue microtask just in case there is only one listener
+        queueMicrotask(() => {
+          // check if refCount got incremented before reaching the microtask
+          if (node.refCount > 0) {
+            return
+          }
+          const path = idToPathMap.get(node.id)
           disposeId(node.id)
-          nodeMap.delete(path)
           idToPathMap.delete(node.id)
-        }
-      })
+          if (path) {
+            pathToNodeMap.delete(path)
+          }
+        })
+      }
     })
   }
 
   return {
+    /** Rebases paths of idNodes */
     beforeRename(oldPath: string, newPath: string) {
-      let renamesToDo: { oldPath: string; newPath: string }[] = []
-      for (let path of nodeMap.keys()) {
+      const renamesToDo = [{ oldPath, newPath }]
+      for (const path of pathToNodeMap.keys()) {
         if (
           path.length > oldPath.length &&
-          path.slice(0, oldPath.length) == oldPath &&
-          path[oldPath.length] == '/'
+          path.slice(0, oldPath.length) === oldPath &&
+          path[oldPath.length] === '/'
         ) {
-          let postfix = path.slice(oldPath.length)
-          let oldPath2 = oldPath + postfix
-          let newPath2 = newPath + postfix
-          renamesToDo.push({ oldPath: oldPath2, newPath: newPath2 })
+          const postfix = path.slice(oldPath.length)
+          renamesToDo.push({ oldPath: oldPath + postfix, newPath: newPath + postfix })
         }
       }
-      renamesToDo.push({ oldPath, newPath })
-      for (let { oldPath: oldPath2, newPath: newPath2 } of renamesToDo) {
-        const node = nodeMap.get(oldPath2)
-        if (node === undefined) {
-          return
-        }
-        nodeMap.delete(oldPath2)
-        nodeMap.set(newPath2, node)
-        idToPathMap.set(node.id, newPath2)
-      }
+      renamesToDo.forEach(renameIdNode)
     },
+    /**
+     * - If idNode of given path exist
+     *     - Increments its reference count
+     * - If idNode of given path does not yet exist
+     *     - Creates an idNode from the given path with reference count 1
+     */
     obtainId(path: string): string {
-      let node = nodeMap.get(path)
+      let node = pathToNodeMap.get(path)
       if (node) {
         node.refCount++
       } else {
         node = createIdNode(path)
       }
-      addCleanup(node, path)
+      addCleanup(node)
       return node.id
     },
+    /**
+     * - Increments reference count of given ID's idNode
+     * - Adds cleanup-function that will decrement the reference count
+     */
     freezeId(id: string) {
       const path = untrack(() => idToPathMap.get(id))
-      const node = path ? nodeMap.get(path) : undefined
-      if (path == undefined) {
+      if (path === undefined) {
         return
       }
+      const node = pathToNodeMap.get(path)
       if (node !== undefined) {
         node.refCount++
-        addCleanup(node, path)
+        addCleanup(node)
       }
     },
-    /**
-     * Reactively converts an ID back to a path
-     */
+    /** Reactively converts an ID back to a path */
     idToPath(id: string): string {
       const path = idToPathMap.get(id)
-      if (path == undefined) {
+      if (path === undefined) {
         throw new Error(`path not found for id: ${id}`)
       }
       return path
     },
-    pathToId(path: string): string {
-      let node = nodeMap.get(path)
-      if (node == undefined) {
-        throw new Error(`node not found for path: ${path}`)
+    /**
+     * Converts a path back to an ID
+     * - If idNode of given path does not exist
+     *     - If no second argument is given _or_ second argument is `true`
+     *         - Throws error
+     *     - If second argument is `false`
+     *         - Creates an idNode with reference count 0
+     */
+    pathToId(path: string, assert = true): string {
+      let node = pathToNodeMap.get(path)
+      if (node === undefined) {
+        if (assert) {
+          throw new Error(`node not found for path: ${path}`)
+        } else {
+          node = createIdNode(path, 0)
+        }
       }
       return node.id
     },
@@ -232,8 +258,8 @@ export type FileTreeProps<T> = Overwrite<
     onDragOver?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onRename?(oldPath: string, newPath: string): void
-    onSelection?(paths: string[]): void
-    selection?: Array<string>
+    onSelectedPaths?(paths: string[]): void
+    selectedPaths?: Array<string>
     sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
   }
 >
@@ -259,53 +285,56 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Selected DirEnts
-  const [selectedDirEntRanges, setSelectedDirEntRanges] = createSignal<
-    Array<[start: string, end?: string]>
-  >([], { equals: false })
-
-  const selectedDirEntIds = createMemo(() => {
-    return selectedDirEntRanges()
-      .flatMap(([start, end]) => {
-        if (end) {
-          const startIndex = flatTree().findIndex(dir => dir.id === start)
-          const endIndex = flatTree().findIndex(dir => dir.id === end)
-
-          return flatTree()
-            .slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1)
-            .map(dirEnt => dirEnt.id)
-        }
-        return start
-      })
-      .sort((a, b) => (a < b ? -1 : 1))
+  const [selectedDirEntSpans, setSelectedDirEntSpans] = createSignal<Array<Array<string>>>([], {
+    equals: false,
   })
 
-  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) =>
-    dirs.includes(id),
-  )
+  const selectedDirEntIds = createMemo(() => new Set(selectedDirEntSpans().flat()))
+
+  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) => dirs.has(id))
 
   // Selection-methods
   function selectDirEntById(id: string) {
-    setSelectedDirEntRanges(dirEnts => [...dirEnts, [id]])
+    setSelectedDirEntSpans(dirEnts => [...dirEnts, [id]])
   }
+
   function deselectDirEntById(id: string) {
-    setSelectedDirEntRanges(
-      pairs =>
-        pairs
-          .map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== id))
-          .filter(pair => pair.length > 0) as [string, string?][],
-    )
+    setSelectedDirEntSpans(pairs => pairs.map(dirEnts => dirEnts.filter(dirEnt => dirEnt !== id)))
   }
+
   function shiftSelectDirEntById(id: string) {
-    setSelectedDirEntRanges(dirEnts => {
-      if (dirEnts.length > 0) {
-        dirEnts[dirEnts.length - 1] = [dirEnts[dirEnts.length - 1]![0], id]
-        return [...dirEnts]
+    setSelectedDirEntSpans(ranges => {
+      // If the selection-ranges are empty, initialize it
+      if (ranges.length === 0) {
+        return [[id]]
       }
-      return [[id]]
+
+      const lastRange = ranges[ranges.length - 1]!
+
+      // If the last range is empty, initialize last range
+      if (lastRange.length === 0) {
+        ranges[ranges.length - 1] = [id]
+        return ranges
+      }
+
+      const startId = ranges[ranges.length - 1]![0]!
+      const startIndex = flatTree().findIndex(dir => dir.id === startId)
+      const endIndex = flatTree().findIndex(dir => dir.id === id)
+
+      ranges[ranges.length - 1] = flatTree()
+        .slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1)
+        .map(dirEnt => dirEnt.id)
+
+      if (startIndex > endIndex) {
+        ranges[ranges.length - 1]?.reverse()
+      }
+
+      return ranges
     })
   }
+
   function resetSelectedDirEntIds() {
-    setSelectedDirEntRanges([])
+    setSelectedDirEntSpans([])
   }
 
   // Expand/Collapse Dirs
@@ -463,7 +492,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   function moveSelectedDirEntsToPath(targetPath: string) {
     const targetId = pathToId(targetPath)
     const ids = selectedDirEntIds()
-    const paths = ids.map(idToPath)
+    const paths = Array.from(ids).map(idToPath)
     const existingPaths = new Array<{ newPath: string; oldPath: string }>()
 
     // Validate if any of the selected paths are ancestor of the target path
@@ -540,16 +569,16 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Call event handler with current selection
-  createEffect(() => props.onSelection?.(selectedDirEntIds()))
+  createEffect(() => props.onSelectedPaths?.(Array.from(selectedDirEntIds()).map(idToPath)))
 
   // Update selection from props
   createComputed(() => {
-    batch(() => {
-      if (!props.selection) return
-      setSelectedDirEntRanges(
-        props.selection.filter(id => props.fs.exists(idToPath(id))).map(id => [id] as [string]),
-      )
-    })
+    if (!props.selectedPaths) return
+    setSelectedDirEntSpans(
+      props.selectedPaths
+        .filter(path => props.fs.exists(path))
+        .map(path => [pathToId(path, false)] as [string]),
+    )
   })
 
   // Freeze ID numbers for selected entries
