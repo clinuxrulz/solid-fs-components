@@ -106,7 +106,7 @@ export function useIndentGuide() {
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                createIdMiddleware                              */
+/*                                createIdGenerator                               */
 /*                                                                                */
 /**********************************************************************************/
 
@@ -118,7 +118,7 @@ type IdNode = {
 // ID Generation Middleware
 function createIdGenerator() {
   const freeIds: Array<string> = []
-  const nodeMap = new Map<string, IdNode>()
+  const pathToNodeMap = new Map<string, IdNode>()
   const idToPathMap = new ReactiveMap<string, string>()
   let nextId = 0
 
@@ -127,9 +127,17 @@ function createIdGenerator() {
       id: allocId(),
       refCount,
     }
-    nodeMap.set(path, node)
+    pathToNodeMap.set(path, node)
     idToPathMap.set(node.id, path)
     return node
+  }
+  function renameIdNode({ oldPath, newPath }: { oldPath: string; newPath: string }) {
+    const node = pathToNodeMap.get(oldPath)
+    if (node) {
+      pathToNodeMap.delete(oldPath)
+      pathToNodeMap.set(newPath, node)
+      idToPathMap.set(node.id, newPath)
+    }
   }
   function allocId() {
     return freeIds.pop() ?? (nextId++).toString()
@@ -143,7 +151,7 @@ function createIdGenerator() {
         node.refCount--
         if (node.refCount <= 0) {
           disposeId(node.id)
-          nodeMap.delete(path)
+          pathToNodeMap.delete(path)
           idToPathMap.delete(node.id)
         }
       })
@@ -151,33 +159,29 @@ function createIdGenerator() {
   }
 
   return {
+    /** Rebases paths of idNodes */
     beforeRename(oldPath: string, newPath: string) {
-      let renamesToDo: { oldPath: string; newPath: string }[] = []
-      for (let path of nodeMap.keys()) {
+      const renamesToDo = [{ oldPath, newPath }]
+      for (const path of pathToNodeMap.keys()) {
         if (
           path.length > oldPath.length &&
-          path.slice(0, oldPath.length) == oldPath &&
-          path[oldPath.length] == '/'
+          path.slice(0, oldPath.length) === oldPath &&
+          path[oldPath.length] === '/'
         ) {
-          let postfix = path.slice(oldPath.length)
-          let oldPath2 = oldPath + postfix
-          let newPath2 = newPath + postfix
-          renamesToDo.push({ oldPath: oldPath2, newPath: newPath2 })
+          const postfix = path.slice(oldPath.length)
+          renamesToDo.push({ oldPath: oldPath + postfix, newPath: newPath + postfix })
         }
       }
-      renamesToDo.push({ oldPath, newPath })
-      for (let { oldPath: oldPath2, newPath: newPath2 } of renamesToDo) {
-        const node = nodeMap.get(oldPath2)
-        if (node === undefined) {
-          return
-        }
-        nodeMap.delete(oldPath2)
-        nodeMap.set(newPath2, node)
-        idToPathMap.set(node.id, newPath2)
-      }
+      renamesToDo.forEach(renameIdNode)
     },
+    /**
+     * - If idNode of given path exist
+     *     - Increments its reference count
+     * - If idNode of given path does not yet exist
+     *     - Creates an idNode from the given path with reference count 1
+     */
     obtainId(path: string): string {
-      let node = nodeMap.get(path)
+      let node = pathToNodeMap.get(path)
       if (node) {
         node.refCount++
       } else {
@@ -186,12 +190,16 @@ function createIdGenerator() {
       addCleanup(node, path)
       return node.id
     },
+    /**
+     * - Increments reference count of given ID's idNode
+     * - Adds cleanup-function that will decrement the reference count
+     */
     freezeId(id: string) {
       const path = untrack(() => idToPathMap.get(id))
-      const node = path ? nodeMap.get(path) : undefined
-      if (path == undefined) {
+      if (path === undefined) {
         return
       }
+      const node = pathToNodeMap.get(path)
       if (node !== undefined) {
         node.refCount++
         addCleanup(node, path)
@@ -200,15 +208,22 @@ function createIdGenerator() {
     /** Reactively converts an ID back to a path */
     idToPath(id: string): string {
       const path = idToPathMap.get(id)
-      if (path == undefined) {
+      if (path === undefined) {
         throw new Error(`path not found for id: ${id}`)
       }
       return path
     },
-    /** Converts a path back to an ID */
+    /**
+     * Converts a path back to an ID
+     * - If idNode of given path does not exist
+     *     - If no second argument is given _or_ second argument is `true`
+     *         - Throws error
+     *     - If second argument is `false`
+     *         - Creates an idNode with reference count 0
+     */
     pathToId(path: string, assert = true): string {
-      let node = nodeMap.get(path)
-      if (node == undefined) {
+      let node = pathToNodeMap.get(path)
+      if (node === undefined) {
         if (assert) {
           throw new Error(`node not found for path: ${path}`)
         } else {
