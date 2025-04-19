@@ -84,14 +84,14 @@ interface FileTreeContext<T> {
 const FileTreeContext = createContext<FileTreeContext<any>>()
 export function useFileTree() {
   const context = useContext(FileTreeContext)
-  if (!context) throw `FileTreeContext is undefined`
+  if (!context) throw new Error(`FileTreeContext is undefined`)
   return context
 }
 
 const DirEntContext = createContext<Accessor<DirEnt>>()
 export function useDirEnt() {
   const context = useContext(DirEntContext)
-  if (!context) throw `DirEntContext is undefined`
+  if (!context) throw new Error(`DirEntContext is undefined`)
   return context
 }
 
@@ -100,7 +100,7 @@ type IndentGuideKind = 'pipe' | 'tee' | 'elbow' | 'spacer'
 const IndentGuideContext = createContext<Accessor<IndentGuideKind>>()
 export function useIndentGuide() {
   const context = useContext(IndentGuideContext)
-  if (!context) throw `IndentGuideContext is undefined`
+  if (!context) throw new Error(`IndentGuideContext is undefined`)
   return context
 }
 
@@ -498,10 +498,10 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     // Validate if any of the selected paths are ancestor of the target path
     for (const path of paths) {
       if (path === targetPath) {
-        throw `Cannot move ${path} into itself.`
+        throw new Error(`Cannot move ${path} into itself.`)
       }
       if (PathUtils.isAncestor(targetPath, path)) {
-        throw `Cannot move because ${path} is ancestor of ${targetPath}.`
+        throw new Error(`Cannot move because ${path} is ancestor of ${targetPath}.`)
       }
     }
 
@@ -528,7 +528,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       })
 
     if (existingPaths.length > 0) {
-      throw `Paths already exist: ${existingPaths.map(({ newPath }) => newPath)}`
+      throw new Error(`Paths already exist: ${existingPaths.map(({ newPath }) => newPath)}`)
     }
 
     // Apply transforms
@@ -794,7 +794,7 @@ FileTree.Name = function (props: {
 
     if (fileTree.fs.exists(newPath)) {
       element.value = dirEnt().name
-      throw `Path ${newPath} already exists.`
+      throw new Error(`Path ${newPath} already exists.`)
     }
 
     dirEnt().rename(newPath)
