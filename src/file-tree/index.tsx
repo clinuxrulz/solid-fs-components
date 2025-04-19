@@ -273,6 +273,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
   // Focused DirEnt
   const [focusedDirEntId, setFocusedDirEntId] = createSignal<string | undefined>()
+
   const isDirEntFocusedById = createSelector(focusedDirEntId)
 
   function focusDirEntById(id: string) {
@@ -283,6 +284,14 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       setFocusedDirEntId()
     }
   }
+
+  // Cleanup of removed dirEnt from focusedDirEntId
+  createEffect(() => {
+    const _focusedDirEntId = focusedDirEntId()
+    if (_focusedDirEntId && !props.fs.exists(idToPath(_focusedDirEntId))) {
+      setFocusedDirEntId()
+    }
+  })
 
   // Selected DirEnts
   const [selectedDirEntSpans, setSelectedDirEntSpans] = createSignal<Array<Array<string>>>([], {
