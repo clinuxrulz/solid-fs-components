@@ -371,11 +371,16 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       id => {
         const unsortedDirEnts = createMemo<Array<Dir | File>>(
           keyArray(
-            () =>
-              props.fs.readdir(idToPath(id), { withFileTypes: true }).map(dirEnt => ({
+            () => {
+              if (!props.fs.exists(idToPath(id))) {
+                collapseDirById(id)
+                return null
+              }
+              return props.fs.readdir(idToPath(id), { withFileTypes: true }).map(dirEnt => ({
                 id: obtainId(dirEnt.path),
                 type: dirEnt.type,
-              })),
+              }))
+            },
             dirEnt => dirEnt.id,
             dirEnt => {
               const indentation = createMemo(() => getIndentationFromPath(idToPath(dirEnt().id)))
@@ -451,13 +456,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
         setDirEntsByDirId(id, () => sortedDirEnts)
         onCleanup(() => setDirEntsByDirId(id, undefined!))
-
-        // Remove path from opened paths if it ceases to fs.exist
-        createComputed(() => {
-          if (!props.fs.exists(idToPath(id))) {
-            setExpandedDirIds(dirs => dirs.filter(dir => dir !== id))
-          }
-        })
       },
     ),
   )
