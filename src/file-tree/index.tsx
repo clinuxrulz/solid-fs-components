@@ -457,7 +457,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       beforeRename(oldPath, newPath)
       props.fs.rename(oldPath, newPath)
       props.onRename?.(oldPath, newPath)
-      focusDirEntById(newPath)
     })
   }
 
