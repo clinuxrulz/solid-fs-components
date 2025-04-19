@@ -767,6 +767,7 @@ FileTree.Name = function (props: {
     }
 
     dirEnt().rename(newPath)
+    dirEnt().focus()
   }
 
   return (
