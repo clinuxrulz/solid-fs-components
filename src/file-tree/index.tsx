@@ -528,7 +528,11 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       })
 
     if (existingPaths.length > 0) {
-      throw new Error(`Paths already exist: ${existingPaths.map(({ newPath }) => newPath)}`)
+      throw new Error(
+        `Error while moving dirEnts. The following paths already exist:\n${existingPaths
+          .map(({ newPath }) => newPath)
+          .join('\n')}`,
+      )
     }
 
     // Apply transforms
