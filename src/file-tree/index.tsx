@@ -289,9 +289,11 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     equals: false,
   })
 
-  const selectedDirEntIds = createMemo(() => new Set(selectedDirEntSpans().flat()))
+  const selectedDirEntIds = createMemo(() => Array.from(new Set(selectedDirEntSpans().flat())))
 
-  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) => dirs.has(id))
+  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) =>
+    dirs.includes(id),
+  )
 
   // Selection-methods
   function selectDirEntById(id: string) {
@@ -337,6 +339,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     setSelectedDirEntSpans([])
   }
 
+  // Cleanup of removed dirs from expandedDirIds
+  createEffect(
+    mapArray(selectedDirEntIds, id => {
+      createEffect(() => {
+        if (!props.fs.exists(idToPath(id))) {
+          deselectDirEntById(id)
+        }
+      })
+    }),
+  )
+
   // Expand/Collapse Dirs
   const [expandedDirIds, setExpandedDirIds] = createSignal<Array<string>>(new Array(), {
     equals: false,
@@ -354,6 +367,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       setExpandedDirIds(ids => [...ids, id])
     }
   }
+
+  // Cleanup of removed dirs from expandedDirIds
+  createEffect(
+    mapArray(expandedDirIds, id => {
+      createEffect(() => {
+        if (!props.fs.exists(idToPath(id))) {
+          collapseDirById(id)
+        }
+      })
+    }),
+  )
 
   // Record<Dir, Accessor<DirEnts>>
   const [dirEntsByDirId, setDirEntsByDirId] = createStore<Record<string, Accessor<Array<DirEnt>>>>(
@@ -373,7 +397,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
           keyArray(
             () => {
               if (!props.fs.exists(idToPath(id))) {
-                collapseDirById(id)
                 return null
               }
               return props.fs.readdir(idToPath(id), { withFileTypes: true }).map(dirEnt => ({
@@ -490,7 +513,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   function moveSelectedDirEntsToPath(targetPath: string) {
     const targetId = pathToId(targetPath)
     const ids = selectedDirEntIds()
-    const paths = Array.from(ids).map(idToPath)
+    const paths = ids.map(idToPath)
     const existingPaths = new Array<{ newPath: string; oldPath: string }>()
 
     // Validate if any of the selected paths are ancestor of the target path
@@ -571,7 +594,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Call event handler with current selection
-  createEffect(() => props.onSelectedPaths?.(Array.from(selectedDirEntIds()).map(idToPath)))
+  createEffect(() => props.onSelectedPaths?.(selectedDirEntIds().map(idToPath)))
 
   // Update selection from props
   createComputed(() => {
