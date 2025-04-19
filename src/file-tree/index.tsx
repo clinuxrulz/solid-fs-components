@@ -122,10 +122,10 @@ function createIdGenerator() {
   const idToPathMap = new ReactiveMap<string, string>()
   let nextId = 0
 
-  function createIdNode(path: string) {
+  function createIdNode(path: string, refCount = 1) {
     const node = {
       id: allocId(),
-      refCount: 1,
+      refCount,
     }
     nodeMap.set(path, node)
     idToPathMap.set(node.id, path)
@@ -141,7 +141,7 @@ function createIdGenerator() {
     onCleanup(() => {
       queueMicrotask(() => {
         node.refCount--
-        if (node.refCount === 0) {
+        if (node.refCount <= 0) {
           disposeId(node.id)
           nodeMap.delete(path)
           idToPathMap.delete(node.id)
@@ -197,9 +197,7 @@ function createIdGenerator() {
         addCleanup(node, path)
       }
     },
-    /**
-     * Reactively converts an ID back to a path
-     */
+    /** Reactively converts an ID back to a path */
     idToPath(id: string): string {
       const path = idToPathMap.get(id)
       if (path == undefined) {
@@ -207,10 +205,15 @@ function createIdGenerator() {
       }
       return path
     },
-    pathToId(path: string): string {
+    /** Converts a path back to an ID */
+    pathToId(path: string, assert = true): string {
       let node = nodeMap.get(path)
       if (node == undefined) {
-        throw new Error(`node not found for path: ${path}`)
+        if (assert) {
+          throw new Error(`node not found for path: ${path}`)
+        } else {
+          node = createIdNode(path, 0)
+        }
       }
       return node.id
     },
@@ -232,8 +235,8 @@ export type FileTreeProps<T> = Overwrite<
     onDragOver?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onDrop?(event: WrapEvent<DragEvent, HTMLDivElement>): void
     onRename?(oldPath: string, newPath: string): void
-    onSelection?(paths: string[]): void
-    selection?: Array<string>
+    onSelectedPaths?(paths: string[]): void
+    selectedPaths?: Array<string>
     sort?(dirEnt1: DirEnt, dirEnt2: DirEnt): number
   }
 >
@@ -540,20 +543,15 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Call event handler with current selection
-  createEffect(() => props.onSelection?.(selectedDirEntIds().map(idToPath)))
+  createEffect(() => props.onSelectedPaths?.(selectedDirEntIds().map(idToPath)))
 
   // Update selection from props
   createComputed(() => {
-    if (!props.selection) return
+    if (!props.selectedPaths) return
     setSelectedDirEntRanges(
-      props.selection
+      props.selectedPaths
         .filter(path => props.fs.exists(path))
-        .map(
-          path =>
-            // NOTE:  this will keep the nodes longer in createIdGenerator's nodeMap
-            //        then strictly needed.
-            [obtainId(path)] as [string],
-        ),
+        .map(path => [pathToId(path, false)] as [string]),
     )
   })
 
