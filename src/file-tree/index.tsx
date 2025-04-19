@@ -84,14 +84,14 @@ interface FileTreeContext<T> {
 const FileTreeContext = createContext<FileTreeContext<any>>()
 export function useFileTree() {
   const context = useContext(FileTreeContext)
-  if (!context) throw `FileTreeContext is undefined`
+  if (!context) throw new Error(`FileTreeContext is undefined`)
   return context
 }
 
 const DirEntContext = createContext<Accessor<DirEnt>>()
 export function useDirEnt() {
   const context = useContext(DirEntContext)
-  if (!context) throw `DirEntContext is undefined`
+  if (!context) throw new Error(`DirEntContext is undefined`)
   return context
 }
 
@@ -100,7 +100,7 @@ type IndentGuideKind = 'pipe' | 'tee' | 'elbow' | 'spacer'
 const IndentGuideContext = createContext<Accessor<IndentGuideKind>>()
 export function useIndentGuide() {
   const context = useContext(IndentGuideContext)
-  if (!context) throw `IndentGuideContext is undefined`
+  if (!context) throw new Error(`IndentGuideContext is undefined`)
   return context
 }
 
@@ -273,6 +273,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
   // Focused DirEnt
   const [focusedDirEntId, setFocusedDirEntId] = createSignal<string | undefined>()
+
   const isDirEntFocusedById = createSelector(focusedDirEntId)
 
   function focusDirEntById(id: string) {
@@ -284,14 +285,24 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     }
   }
 
+  // Cleanup of removed dirEnt from focusedDirEntId
+  createEffect(() => {
+    const _focusedDirEntId = focusedDirEntId()
+    if (_focusedDirEntId && !props.fs.exists(idToPath(_focusedDirEntId))) {
+      setFocusedDirEntId()
+    }
+  })
+
   // Selected DirEnts
   const [selectedDirEntSpans, setSelectedDirEntSpans] = createSignal<Array<Array<string>>>([], {
     equals: false,
   })
 
-  const selectedDirEntIds = createMemo(() => new Set(selectedDirEntSpans().flat()))
+  const selectedDirEntIds = createMemo(() => Array.from(new Set(selectedDirEntSpans().flat())))
 
-  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) => dirs.has(id))
+  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) =>
+    dirs.includes(id),
+  )
 
   // Selection-methods
   function selectDirEntById(id: string) {
@@ -337,6 +348,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     setSelectedDirEntSpans([])
   }
 
+  // Cleanup of removed dirs from expandedDirIds
+  createEffect(
+    mapArray(selectedDirEntIds, id => {
+      createEffect(() => {
+        if (!props.fs.exists(idToPath(id))) {
+          deselectDirEntById(id)
+        }
+      })
+    }),
+  )
+
   // Expand/Collapse Dirs
   const [expandedDirIds, setExpandedDirIds] = createSignal<Array<string>>(new Array(), {
     equals: false,
@@ -355,6 +377,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     }
   }
 
+  // Cleanup of removed dirs from expandedDirIds
+  createEffect(
+    mapArray(expandedDirIds, id => {
+      createEffect(() => {
+        if (!props.fs.exists(idToPath(id))) {
+          collapseDirById(id)
+        }
+      })
+    }),
+  )
+
   // Record<Dir, Accessor<DirEnts>>
   const [dirEntsByDirId, setDirEntsByDirId] = createStore<Record<string, Accessor<Array<DirEnt>>>>(
     {},
@@ -371,11 +404,15 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       id => {
         const unsortedDirEnts = createMemo<Array<Dir | File>>(
           keyArray(
-            () =>
-              props.fs.readdir(idToPath(id), { withFileTypes: true }).map(dirEnt => ({
+            () => {
+              if (!props.fs.exists(idToPath(id))) {
+                return null
+              }
+              return props.fs.readdir(idToPath(id), { withFileTypes: true }).map(dirEnt => ({
                 id: obtainId(dirEnt.path),
                 type: dirEnt.type,
-              })),
+              }))
+            },
             dirEnt => dirEnt.id,
             dirEnt => {
               const indentation = createMemo(() => getIndentationFromPath(idToPath(dirEnt().id)))
@@ -451,13 +488,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
         setDirEntsByDirId(id, () => sortedDirEnts)
         onCleanup(() => setDirEntsByDirId(id, undefined!))
-
-        // Remove path from opened paths if it ceases to fs.exist
-        createComputed(() => {
-          if (!props.fs.exists(idToPath(id))) {
-            setExpandedDirIds(dirs => dirs.filter(dir => dir !== id))
-          }
-        })
       },
     ),
   )
@@ -492,16 +522,16 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   function moveSelectedDirEntsToPath(targetPath: string) {
     const targetId = pathToId(targetPath)
     const ids = selectedDirEntIds()
-    const paths = Array.from(ids).map(idToPath)
+    const paths = ids.map(idToPath)
     const existingPaths = new Array<{ newPath: string; oldPath: string }>()
 
     // Validate if any of the selected paths are ancestor of the target path
     for (const path of paths) {
       if (path === targetPath) {
-        throw `Cannot move ${path} into itself.`
+        throw new Error(`Cannot move ${path} into itself.`)
       }
       if (PathUtils.isAncestor(targetPath, path)) {
-        throw `Cannot move because ${path} is ancestor of ${targetPath}.`
+        throw new Error(`Cannot move because ${path} is ancestor of ${targetPath}.`)
       }
     }
 
@@ -528,7 +558,11 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       })
 
     if (existingPaths.length > 0) {
-      throw `Paths already exist: ${existingPaths.map(({ newPath }) => newPath)}`
+      throw new Error(
+        `Error while moving dirEnts. The following paths already exist:\n${existingPaths
+          .map(({ newPath }) => newPath)
+          .join('\n')}`,
+      )
     }
 
     // Apply transforms
@@ -569,7 +603,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Call event handler with current selection
-  createEffect(() => props.onSelectedPaths?.(Array.from(selectedDirEntIds()).map(idToPath)))
+  createEffect(() => props.onSelectedPaths?.(selectedDirEntIds().map(idToPath)))
 
   // Update selection from props
   createComputed(() => {
@@ -794,7 +828,7 @@ FileTree.Name = function (props: {
 
     if (fileTree.fs.exists(newPath)) {
       element.value = dirEnt().name
-      throw `Path ${newPath} already exists.`
+      throw new Error(`Path ${newPath} already exists.`)
     }
 
     dirEnt().rename(newPath)

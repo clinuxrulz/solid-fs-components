@@ -160,7 +160,7 @@ export function createFileSystem<T = string>() {
           return value.includes(path)
         })
 
-        if (_dirEnts.length > 0) {
+        if (_dirEnts.length > 0 && !options?.force) {
           throw `Directory is not empty ${_dirEnts}`
         }
       }
