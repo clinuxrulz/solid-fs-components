@@ -1,8 +1,7 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { createSignal, onMount, type Component } from 'solid-js'
-import { PathUtils } from 'src/utils'
 import { TmTextarea } from 'tm-textarea/solid'
-import { createFileSystem, DefaultIndentGuide, FileTree } from '../src'
+import { createFileSystem, DefaultIndentGuide, FileTree, PathUtils } from '../src'
 import styles from './App.module.css'
 
 const project = import.meta.glob('../**/*', { as: 'raw', eager: true })
