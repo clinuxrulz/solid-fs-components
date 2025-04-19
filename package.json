@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@solid-primitives/keyed": "^1.5.0",
+    "@solid-primitives/map": "^0.6.0",
     "@solid-primitives/range": "^0.2.0",
     "clsx": "^2.1.1"
   },

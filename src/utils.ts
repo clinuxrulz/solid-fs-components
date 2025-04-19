@@ -20,6 +20,9 @@ export const PathUtils = {
     }
     return path
   },
+  rename(path: string, name: string) {
+    return [...path.split('/').slice(0, -1), name].join('/')
+  },
 }
 
 export function lastItem<T>(arr: Array<T>): T | undefined {

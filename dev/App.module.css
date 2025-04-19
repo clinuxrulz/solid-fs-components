@@ -36,6 +36,7 @@
   font-size: 10pt;
   line-height: 14pt;
   text-align: left;
+  white-space: nowrap;
 }
 
 .dirEnt:focus {

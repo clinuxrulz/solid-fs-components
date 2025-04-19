@@ -137,7 +137,7 @@ export function createFileSystem<T = string>() {
       setDirEnts(
         produce(files => {
           Object.keys(dirEnts).forEach(path => {
-            if (path.startsWith(previous)) {
+            if (PathUtils.isAncestor(path, previous) || path === previous) {
               const newPath = path.replace(previous, next)
               const file = files[path]!
               files[newPath] = file
