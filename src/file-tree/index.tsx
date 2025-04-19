@@ -289,14 +289,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     equals: false,
   })
 
-  const selectedDirEntIds = createMemo(
-    () =>
-      new Set(
-        selectedDirEntSpans()
-          .flat()
-          .sort((a, b) => (a < b ? -1 : 1)),
-      ),
-  )
+  const selectedDirEntIds = createMemo(() => new Set(selectedDirEntSpans().flat()))
 
   const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) => dirs.has(id))
 
