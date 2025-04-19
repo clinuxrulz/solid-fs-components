@@ -145,14 +145,17 @@ function createIdGenerator() {
   function disposeId(id: string) {
     freeIds.push(id)
   }
-  function addCleanup(node: IdNode, path: string) {
+  function addCleanup(node: IdNode) {
     onCleanup(() => {
       queueMicrotask(() => {
         node.refCount--
         if (node.refCount <= 0) {
           disposeId(node.id)
-          pathToNodeMap.delete(path)
           idToPathMap.delete(node.id)
+          const path = idToPathMap.get(node.id)
+          if (path) {
+            pathToNodeMap.delete(path)
+          }
         }
       })
     })
@@ -187,7 +190,7 @@ function createIdGenerator() {
       } else {
         node = createIdNode(path)
       }
-      addCleanup(node, path)
+      addCleanup(node)
       return node.id
     },
     /**
@@ -202,7 +205,7 @@ function createIdGenerator() {
       const node = pathToNodeMap.get(path)
       if (node !== undefined) {
         node.refCount++
-        addCleanup(node, path)
+        addCleanup(node)
       }
     },
     /** Reactively converts an ID back to a path */
