@@ -146,17 +146,19 @@ function createIdGenerator() {
     freeIds.push(id)
   }
   function addCleanup(node: IdNode) {
-    onCleanup(() => {
-      node.refCount--
-      if (node.refCount <= 0) {
-        const path = idToPathMap.get(node.id)
-        disposeId(node.id)
-        idToPathMap.delete(node.id)
-        if (path) {
-          pathToNodeMap.delete(path)
+    onCleanup(() =>
+      queueMicrotask(() => {
+        node.refCount--
+        if (node.refCount <= 0) {
+          const path = idToPathMap.get(node.id)
+          disposeId(node.id)
+          idToPathMap.delete(node.id)
+          if (path) {
+            pathToNodeMap.delete(path)
+          }
         }
-      }
-    })
+      })
+    )
   }
 
   return {
@@ -278,25 +280,94 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Selected DirEnts
-  const [selectedDirEntRanges, setSelectedDirEntRanges] = createSignal<
-    Array<[start: string, end?: string]>
+  const [selectedDirEntIds, setSelectedDirEntsIds] = createSignal<
+    Array<string>
   >([], { equals: false })
 
-  const selectedDirEntIds = createMemo(() => {
-    return selectedDirEntRanges()
-      .flatMap(([start, end]) => {
-        if (end) {
-          const startIndex = flatTree().findIndex(dir => dir.id === start)
-          const endIndex = flatTree().findIndex(dir => dir.id === end)
+  // Record<Dir, Accessor<DirEnts>>
+  const [dirEntsByDirId, setDirEntsByDirId] = createStore<Record<string, Accessor<Array<DirEnt>>>>(
+    {},
+  )
 
-          return flatTree()
-            .slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1)
-            .map(dirEnt => dirEnt.id)
-        }
-        return start
-      })
-      .sort((a, b) => (a < b ? -1 : 1))
+  function getDirEntsOfDirId(id: string) {
+    return dirEntsByDirId[id]?.() || []
+  }
+
+  // DirEnts as a flat list
+  const flatTree = createMemo(() => {
+    const list = new Array<DirEnt>()
+    const idStack = [baseId()]
+    while (idStack.length > 0) {
+      const id = idStack.shift()!
+      const dirEnts = getDirEntsOfDirId(id)
+      idStack.push(
+        ...dirEnts.filter(dirEnt => dirEnt.type === 'dir' && dirEnt.expanded).map(dir => dir.id),
+      )
+      list.splice(list.findIndex(dirEnt => dirEnt.id === id) + 1, 0, ...dirEnts)
+    }
+    return list
   })
+
+  const selectedDirEntRanges = createMemo(() => {
+    let flatTree2 = flatTree();
+    let selectedIndices: Array<number> = [];
+    for (let id of selectedDirEntIds()) {
+      let index = flatTree2.findIndex(dir => dir.id === id);
+      if (index == -1) {
+        continue;
+      }
+      selectedIndices.push(index);
+    }
+    selectedIndices.sort((a, b) => a - b);
+    let result: Array<[start: number, end?: number]> = selectedIndices.map((idx) => [idx, undefined]);
+    for (let i = result.length-1; i > 0; --i) {
+      let j = i - 1;
+      let rangeI = result[i]!;
+      let rangeJ = result[j]!;
+      let rangeIStart = rangeI[0];
+      let rangeJEnd = rangeJ[1] ?? rangeJ[0];
+      if (rangeJEnd + 1 == rangeIStart) {
+        let rangeJStart = rangeJ[0];
+        let rangeIEnd = rangeI[1] ?? rangeI[0];
+        let newRange: [start: number, end: number] = [rangeJStart, rangeIEnd];
+        result.splice(i, 1);
+        result[j] = newRange;
+      }
+    }
+    let result2: Array<[start: string, end?: string]> = result.map(([start, end]) =>
+      [flatTree2[start]!.id, end == undefined ? undefined : flatTree2[end]!.id]
+    );
+    return result2;
+  });
+
+  function setSelectedDirEntRanges(ranges: Array<[start: string, end?: string]>): void;
+  function setSelectedDirEntRanges(callback: (ranges: Array<[start: string, end?: string]>) => Array<[start: string, end?: string]>): void;
+  function setSelectedDirEntRanges(param: Array<[start: string, end?: string]> | ((ranges: Array<[start: string, end?: string]>) => Array<[start: string, end?: string]>)): void {
+    untrack(() => {
+      if (typeof param == "function") {
+        _setSelectedDirEntRanges(param(selectedDirEntRanges()));
+      } else {
+        _setSelectedDirEntRanges(param);
+      }
+    });
+  }
+
+  const _setSelectedDirEntRanges = (ranges: Array<[start: string, end?: string]>) => {
+    let flatTree2 = flatTree();
+    let selectionSet = new Set<string>;
+    for (let [start, end] of ranges) {
+      if (end !== undefined) {
+        const startIndex = flatTree2.findIndex(dir => dir.id === start)
+        const endIndex = flatTree2.findIndex(dir => dir.id === end)
+        for (let i = startIndex; i <= endIndex; ++i) {
+          selectionSet.add(flatTree2[i]!.id);
+        }
+      } else {
+        selectionSet.add(start);
+      }
+    }
+    setSelectedDirEntsIds(Array.from(selectionSet));
+  };
 
   const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) =>
     dirs.includes(id),
@@ -343,15 +414,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     if (id !== baseId() && !expandedDirIds().includes(id)) {
       setExpandedDirIds(ids => [...ids, id])
     }
-  }
-
-  // Record<Dir, Accessor<DirEnts>>
-  const [dirEntsByDirId, setDirEntsByDirId] = createStore<Record<string, Accessor<Array<DirEnt>>>>(
-    {},
-  )
-
-  function getDirEntsOfDirId(id: string) {
-    return dirEntsByDirId[id]?.() || []
   }
 
   // Populate dirEntsByDir
@@ -451,21 +513,6 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       },
     ),
   )
-
-  // DirEnts as a flat list
-  const flatTree = createMemo(() => {
-    const list = new Array<DirEnt>()
-    const idStack = [baseId()]
-    while (idStack.length > 0) {
-      const id = idStack.shift()!
-      const dirEnts = getDirEntsOfDirId(id)
-      idStack.push(
-        ...dirEnts.filter(dirEnt => dirEnt.type === 'dir' && dirEnt.expanded).map(dir => dir.id),
-      )
-      list.splice(list.findIndex(dirEnt => dirEnt.id === id) + 1, 0, ...dirEnts)
-    }
-    return list
-  })
 
   function getIndentationFromPath(path: string) {
     return path.split('/').length - config.base.split('/').length
