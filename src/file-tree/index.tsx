@@ -146,19 +146,24 @@ function createIdGenerator() {
     freeIds.push(id)
   }
   function addCleanup(node: IdNode) {
-    onCleanup(() =>
-      queueMicrotask(() => {
-        node.refCount--
-        if (node.refCount <= 0) {
+    onCleanup(() => {
+      node.refCount--
+      if (node.refCount <= 0) {
+        // queue microtask just in case there is only one listener
+        queueMicrotask(() => {
+          // check if refCount got incremented before reaching the microtask
+          if (node.refCount > 0) {
+            return;
+          }
           const path = idToPathMap.get(node.id)
           disposeId(node.id)
           idToPathMap.delete(node.id)
           if (path) {
             pathToNodeMap.delete(path)
           }
-        }
-      })
-    )
+        })
+      }
+    })
   }
 
   return {
