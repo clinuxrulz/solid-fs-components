@@ -262,6 +262,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   const [selectedDirEntRanges, setSelectedDirEntRanges] = createSignal<
     Array<[start: string, end?: string]>
   >([], { equals: false })
+
   const selectedDirEntIds = createMemo(() => {
     return selectedDirEntRanges()
       .flatMap(([start, end]) => {
@@ -277,7 +278,8 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       })
       .sort((a, b) => (a < b ? -1 : 1))
   })
-  const isDirEntSelected = createSelector(selectedDirEntIds, (id: string, dirs) =>
+
+  const isDirEntSelectedById = createSelector(selectedDirEntIds, (id: string, dirs) =>
     dirs.includes(id),
   )
 
@@ -306,23 +308,11 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     setSelectedDirEntRanges([])
   }
 
-  // Call event handler with current selection
-  createEffect(() => props.onSelection?.(selectedDirEntIds()))
-
-  // Update selection from props
-  createEffect(() => {
-    batch(() => {
-      if (!props.selection) return
-      setSelectedDirEntRanges(
-        props.selection.filter(id => props.fs.exists(idToPath(id))).map(id => [id] as [string]),
-      )
-    })
-  })
-
   // Expand/Collapse Dirs
   const [expandedDirIds, setExpandedDirIds] = createSignal<Array<string>>(new Array(), {
     equals: false,
   })
+
   const isDirExpandedById = createSelector(expandedDirIds, (id: string, expandedDirs) =>
     expandedDirs.includes(id),
   )
@@ -386,7 +376,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
                   shiftSelectDirEntById(dirEnt().id)
                 },
                 get selected() {
-                  return isDirEntSelected(dirEnt().id)
+                  return isDirEntSelectedById(dirEnt().id)
                 },
                 rename(newPath: string) {
                   renameDirEnt(idToPath(dirEnt().id), newPath)
@@ -549,6 +539,19 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     isDirEntFocused: isDirEntFocusedById,
     pathToId,
   }
+
+  // Call event handler with current selection
+  createEffect(() => props.onSelection?.(selectedDirEntIds()))
+
+  // Update selection from props
+  createComputed(() => {
+    batch(() => {
+      if (!props.selection) return
+      setSelectedDirEntRanges(
+        props.selection.filter(id => props.fs.exists(idToPath(id))).map(id => [id] as [string]),
+      )
+    })
+  })
 
   // Freeze ID numbers for selected entries
   createComputed(() => selectedDirEntIds().forEach(freezeId))
