@@ -246,15 +246,15 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   const baseId = createMemo(() => obtainId(config.base))
 
   // Focused DirEnt
-  const [focusedDirEnt, setFocusedDirEnt] = createSignal<string | undefined>()
-  const isDirEntFocused = createSelector(focusedDirEnt)
+  const [focusedDirEntId, setFocusedDirEntId] = createSignal<string | undefined>()
+  const isDirEntFocusedById = createSelector(focusedDirEntId)
 
-  function focusDirEnt(path: string) {
-    setFocusedDirEnt(path)
+  function focusDirEntById(id: string) {
+    setFocusedDirEntId(id)
   }
-  function blurDirEnt(path: string) {
-    if (focusedDirEnt() === path) {
-      setFocusedDirEnt()
+  function blurDirEntById(id: string) {
+    if (focusedDirEntId() === id) {
+      setFocusedDirEntId()
     }
   }
 
@@ -392,13 +392,13 @@ export function FileTree<T>(props: FileTreeProps<T>) {
                   renameDirEnt(idToPath(dirEnt().id), newPath)
                 },
                 focus() {
-                  focusDirEnt(idToPath(dirEnt().id))
+                  focusDirEntById(dirEnt().id)
                 },
                 blur() {
-                  blurDirEnt(idToPath(dirEnt().id))
+                  blurDirEntById(dirEnt().id)
                 },
                 get focused() {
-                  return isDirEntFocused(idToPath(dirEnt().id))
+                  return isDirEntFocusedById(dirEnt().id)
                 },
                 // Dir-specific API
                 get expand() {
@@ -467,7 +467,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
       beforeRename(oldPath, newPath)
       props.fs.rename(oldPath, newPath)
       props.onRename?.(oldPath, newPath)
-      focusDirEnt(newPath)
+      focusDirEntById(newPath)
     })
   }
 
@@ -544,9 +544,9 @@ export function FileTree<T>(props: FileTreeProps<T>) {
     deselectDirEntById,
     shiftSelectDirEntById,
     getDirEntsOfDirId,
-    focusDirEnt,
-    blurDirEnt,
-    isDirEntFocused,
+    focusDirEnt: focusDirEntById,
+    blurDirEnt: blurDirEntById,
+    isDirEntFocused: isDirEntFocusedById,
     pathToId,
   }
 
@@ -601,6 +601,14 @@ FileTree.DirEnt = function (
   const dirEnt = useDirEnt()
 
   const handlers = {
+    ref(element: HTMLButtonElement) {
+      createEffect(() => {
+        if (dirEnt().focused) {
+          element.focus()
+        }
+      })
+      props.ref?.(element)
+    },
     onPointerDown(event: WrapEvent<PointerEvent, HTMLButtonElement>) {
       batch(() => {
         if (event.shiftKey) {
@@ -653,14 +661,6 @@ FileTree.DirEnt = function (
     onBlur(event: WrapEvent<FocusEvent, HTMLButtonElement>) {
       dirEnt().blur()
       props.onBlur?.(event)
-    },
-    ref(element: HTMLButtonElement) {
-      onMount(() => {
-        if (dirEnt().focused) {
-          element.focus()
-        }
-      })
-      props.ref?.(element)
     },
   }
 
