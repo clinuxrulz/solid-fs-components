@@ -147,17 +147,15 @@ function createIdGenerator() {
   }
   function addCleanup(node: IdNode) {
     onCleanup(() => {
-      const path = idToPathMap.get(node.id)
-      queueMicrotask(() => {
-        node.refCount--
-        if (node.refCount <= 0) {
-          disposeId(node.id)
-          idToPathMap.delete(node.id)
-          if (path) {
-            pathToNodeMap.delete(path)
-          }
+      node.refCount--
+      if (node.refCount <= 0) {
+        const path = idToPathMap.get(node.id)
+        disposeId(node.id)
+        idToPathMap.delete(node.id)
+        if (path) {
+          pathToNodeMap.delete(path)
         }
-      })
+      }
     })
   }
 
