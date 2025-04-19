@@ -544,12 +544,17 @@ export function FileTree<T>(props: FileTreeProps<T>) {
 
   // Update selection from props
   createComputed(() => {
-    batch(() => {
-      if (!props.selection) return
-      setSelectedDirEntRanges(
-        props.selection.filter(id => props.fs.exists(idToPath(id))).map(id => [id] as [string]),
-      )
-    })
+    if (!props.selection) return
+    setSelectedDirEntRanges(
+      props.selection
+        .filter(path => props.fs.exists(path))
+        .map(
+          path =>
+            // NOTE:  this will keep the nodes longer in createIdGenerator's nodeMap
+            //        then strictly needed.
+            [obtainId(path)] as [string],
+        ),
+    )
   })
 
   // Freeze ID numbers for selected entries
