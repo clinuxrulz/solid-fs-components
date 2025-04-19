@@ -755,7 +755,7 @@ FileTree.Name = function (props: {
   const fileTree = useFileTree()
 
   function rename(element: HTMLInputElement) {
-    const newPath = [...dirEnt().path.split('/').slice(0, -1), element.value].join('/')
+    const newPath = PathUtils.rename(dirEnt().path, element.value)
 
     if (newPath === dirEnt().path) {
       return
