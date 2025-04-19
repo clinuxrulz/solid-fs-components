@@ -66,6 +66,7 @@ const App: Component = () => {
           onRename={(oldPath, newPath) =>
             setSelectedFile(file => PathUtils.rebase(file, oldPath, newPath))
           }
+          onSelection={console.log}
         >
           {dirEnt => {
             const [editable, setEditable] = createSignal(false)

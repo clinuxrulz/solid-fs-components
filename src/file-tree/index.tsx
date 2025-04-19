@@ -540,7 +540,7 @@ export function FileTree<T>(props: FileTreeProps<T>) {
   }
 
   // Call event handler with current selection
-  createEffect(() => props.onSelection?.(selectedDirEntIds()))
+  createEffect(() => props.onSelection?.(selectedDirEntIds().map(idToPath)))
 
   // Update selection from props
   createComputed(() => {
