@@ -149,12 +149,19 @@ function createIdGenerator() {
     onCleanup(() => {
       node.refCount--
       if (node.refCount <= 0) {
-        const path = idToPathMap.get(node.id)
-        disposeId(node.id)
-        idToPathMap.delete(node.id)
-        if (path) {
-          pathToNodeMap.delete(path)
-        }
+        // queue microtask just in case there is only one listener
+        queueMicrotask(() => {
+          // check if refCount got incremented before reaching the microtask
+          if (node.refCount > 0) {
+            return
+          }
+          const path = idToPathMap.get(node.id)
+          disposeId(node.id)
+          idToPathMap.delete(node.id)
+          if (path) {
+            pathToNodeMap.delete(path)
+          }
+        })
       }
     })
   }
