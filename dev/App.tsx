@@ -1,7 +1,7 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { createSignal, onMount, type Component } from 'solid-js'
 import { TmTextarea } from 'tm-textarea/solid'
-import { createFileSystem, DefaultIndentGuide, FileTree, PathUtils } from '../src'
+import { createFileSystemIdBacked, DefaultIndentGuide, FileTree, PathUtils } from '../src'
 import styles from './App.module.css'
 
 const project = import.meta.glob('../**/*', { as: 'raw', eager: true })
@@ -17,7 +17,7 @@ function transform(path: string, current: string): string {
 const App: Component = () => {
   const [selectedFile, setSelectedFile] = createSignal<string>('index0.ts')
 
-  const fs = createFileSystem<string>()
+  const fs = createFileSystemIdBacked<string>()
 
   async function populate() {
     for (const path of Object.keys(project)) {

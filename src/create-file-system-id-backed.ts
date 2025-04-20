@@ -59,6 +59,28 @@ export function createFileSystem<T = string>() {
   const ROOT_ID = "root";
   const dirEnts = new ReactiveMap</*id*/string, DirEnt<T>>();
 
+  let allocId: () => string;
+  {
+    let nextId = 0;
+    allocId = () => (nextId++).toString();
+  }
+
+  {
+    let [ name, setName ] = createSignal("");
+    let [ contents, setContents ] = createStore<{
+      value: string[],
+    }>({
+      value: [],
+    });
+    dirEnts.set(ROOT_ID, {
+      type: "dir",
+      name,
+      setName,
+      contents,
+      setContents,
+    });
+  }
+
   function navigate(path: string): /*id:*/string {
     if (path == "" || path == "/") {
       return ROOT_ID;
@@ -215,6 +237,67 @@ export function createFileSystem<T = string>() {
     }
   }
 
+  let existsByIdFromPathMap: Record</*path*/string,{
+    result: Accessor<boolean>,
+    refCount: number,
+    dispose: () => void,
+  }> = {};
+
+  function exists(path: string) {
+    if (path == "" || path == "/") {
+      return true;
+    } else {
+      let r = existsByIdFromPathMap[path];
+      if (r == undefined) {
+        let idx = path.lastIndexOf("/");
+        let name = path.slice(idx+1);
+        let prefix = idx == -1 ? "" : path.slice(0, idx);
+        let { result, dispose } = createRoot((dispose) => {
+          let result = createMemo(() => {
+            let preExists = exists(prefix);
+            if (!preExists) {
+              return false;
+            }
+            let preId = navigate(prefix);
+            let preDirEnt = dirEnts.get(preId);
+            if (preDirEnt?.type != "dir") {
+              return false;
+            }
+            return preDirEnt.contents.value.some((x) => {
+              let dirEnt = dirEnts.get(x);
+              return dirEnt?.name() === name;
+            });
+          });
+          return { result, dispose, };
+        });
+        let node = {
+          result,
+          refCount: 1,
+          dispose,
+        };
+        existsByIdFromPathMap[path] = node;
+        return node.result();
+      } else {
+        let node = r;
+        node.refCount++;
+        onCleanup(() => {
+          node.refCount--;
+          if (node.refCount == 0) {
+            queueMicrotask(() => {
+              if (node.refCount == 0) {
+                let path2 = Object.entries(existsByIdFromPathMap).find(([_, r]) => r == node)?.[0];
+                if (path2 != undefined) {
+                  delete existsByIdFromPathMap[path2];
+                }
+              }
+            });
+          }
+        });
+        return node.result();
+      }
+    }
+  }
+
   let beforeRename = (oldPath: string, newPath: string) => {
     const renamesToDo = [{ oldPath, newPath }]
     for (const path of untrack(() => dirEnts.keys())) {
@@ -240,6 +323,13 @@ export function createFileSystem<T = string>() {
         if (node != undefined) {
           readFileByIdFromPathMap[newPath] = node;
           delete readFileByIdFromPathMap[oldPath];
+        }
+      }
+      {
+        let node = existsByIdFromPathMap[oldPath];
+        if (node != undefined) {
+          existsByIdFromPathMap[newPath] = node;
+          delete existsByIdFromPathMap[oldPath];
         }
       }
     }
@@ -271,14 +361,40 @@ export function createFileSystem<T = string>() {
 
   const fs = {
     exists(path: string) {
-      return path in dirEnts
+      return exists(path);
     },
     getType(path: string): DirEnt<T>['type'] {
       throw new Error("TODO");
     },
     readdir,
     mkdir(path: string, options?: { recursive?: boolean }) {
-      throw new Error("TODO");
+      let idx = path.lastIndexOf("/");
+      let name = path.slice(idx+1);
+      let prefix = idx == -1 ? "" : path.slice(0, idx);
+      let preId = navigate(prefix);
+      let pre = untrack(() => dirEnts.get(preId));
+      if (pre?.type != "dir") {
+        return;
+      }
+      let [ name2, setName2 ] = createSignal(name);
+      let [ contents, setContents ] = createStore<{
+        value: string[],
+      }>({
+        value: [],
+      });
+      let dir: Dir<T> = {
+        type: "dir",
+        name: name2,
+        setName: setName2,
+        contents,
+        setContents,
+      };
+      let id = allocId();
+      dirEnts.set(id, dir);
+      pre.setContents("value", (contents: string[]) => [
+        ...contents,
+        id,
+      ]);
     },
     readFile(path: string) {
       return readFile(path);
@@ -359,12 +475,43 @@ export function createFileSystem<T = string>() {
       );
     },
     writeFile(path: string, source: T) {
-      let fileId = navigate(path);
-      let file = untrack(() => dirEnts.get(fileId));
-      if (file?.type != "file") {
+      let idx = path.lastIndexOf("/");
+      let name = path.slice(idx+1);
+      let prefix = idx == -1 ? "" : path.slice(0, idx);
+      let preId = navigate(prefix);
+      let pre = untrack(() => dirEnts.get(preId));
+      if (pre?.type != "dir") {
         return;
       }
-      file.set(source);
+      let existingFile = untrack(() => pre.contents.value.flatMap((x) => {
+        let file = dirEnts.get(x);
+        if (file?.type != "file") {
+          return [];
+        }
+        if (file.name() == name) {
+          return [file];
+        }
+        return [];
+      }));
+      if (existingFile.length == 1) {
+        existingFile[0]?.set(source);
+        return;
+      }
+      let [ name2, setName2 ] = createSignal(name);
+      let [ get, set ] = createSignal<T>(source);
+      let file: File<T> = {
+        type: "file",
+        name: name2,
+        setName: setName2,
+        get,
+        set,
+      };
+      let fileId = allocId();
+      dirEnts.set(fileId, file);
+      pre.setContents("value", (contents: string[]) => [
+        ...contents,
+        fileId,
+      ]);
     },
   }
 
