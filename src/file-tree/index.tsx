@@ -840,7 +840,7 @@ FileTree.Name = function (props: {
       when={props.editable}
       fallback={
         <span class={props.class} style={props.style}>
-          {dirEnt().name}
+          {dirEnt().name} [ID = {dirEnt().id}]
         </span>
       }
     >

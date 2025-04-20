@@ -126,7 +126,7 @@ export function createFileSystem<T = string>() {
                 return [];
               }
               let type = dirEnt.type;
-              let path2 = path + "/" + dirEnt.name;
+              let path2 = path + "/" + dirEnt.name();
               return [{
                 type,
                 path: path2,
